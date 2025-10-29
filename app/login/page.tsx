@@ -23,7 +23,6 @@ export default function LoginPage() {
       const result = await login(username, password);
       
       if (result.success) {
-        toast.success("Login successful!");
         router.push("/dashboard");
       } else {
         setError(result.message);

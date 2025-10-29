@@ -82,7 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userData = await response.json();
         setUser(userData);
         toast.success("Login successful! Welcome back.");
+        router.push("/dashboard");
         return { success: true, message: "Login successful" };
+
       } else {
         const errorData = await response.json();
         return { 
