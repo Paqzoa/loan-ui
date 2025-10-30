@@ -6,7 +6,7 @@
 // API URL configuration
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 
   (process.env.NODE_ENV === 'production' 
-    ? ' https://loan-backend-ijs9.onrender.com' // Production URL
+    ? 'https://loan-backend-ijs9.onrender.com' // Production URL
     : 'http://localhost:8100'); // Development URL
 
 // Application environment
