@@ -1,139 +1,107 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import config from "./config";
 import toast from "react-hot-toast";
 
-// Define the shape of our auth context
+// Types
+interface User { id: number; username: string; role?: string; }
 interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
-  logout: () => Promise<void>;
+  loading: boolean;
   isAuthenticated: boolean;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
-// User type definition
-interface User {
-  username: string;
-  id: number;
-  role?: string;
-}
-
-// Create the auth context with a default value
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  isLoading: true,
-  login: async () => ({ success: false, message: "Not implemented" }),
-  logout: async () => {},
+  loading: true,
   isAuthenticated: false,
+  login: async () => false,
+  logout: async () => {},
+  refreshUser: async () => {},
 });
 
-import config from './config';
-
-// Auth provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Check if user is authenticated on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await fetch(`${config.api.baseUrl}/auth/me`, {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (response.ok) {
-          const userData = await response.json();
-          setUser(userData);
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error("Auth check failed:", error);
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, []);
-
-  // Login function
-  const login = async (username: string, password: string) => {
+  // Universal user detector (refreshed on mount and after login)
+  const refreshUser = async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`${config.api.baseUrl}/auth/login`, {
-        method: "POST",
+      const res = await fetch(`${config.api.baseUrl}/auth/me`, {
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      });
+      if (res.ok) {
+        setUser(await res.json());
+      } else {
+        setUser(null);
+      }
+    } catch (e) {
+      setUser(null);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { refreshUser(); }, []);
+
+  const login = async (username: string, password: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${config.api.baseUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ username, password }),
       });
-
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-        toast.success("Login successful! Welcome back.");
+      if (res.ok) {
+        await refreshUser(); // Always recheck after login
+        toast.success("Welcome back!");
         router.push("/dashboard");
-        return { success: true, message: "Login successful" };
-
+        return true;
       } else {
-        const errorData = await response.json();
-        return { 
-          success: false, 
-          message: errorData.detail || "Login failed. Please check your credentials." 
-        };
+        const data = await res.json().catch(() => ({}));
+        toast.error(data?.detail || "Login failed");
+        return false;
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      return { 
-        success: false, 
-        message: "An error occurred during login. Please try again." 
-      };
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Logout function
   const logout = async () => {
+    setLoading(true);
     try {
       await fetch(`${config.api.baseUrl}/auth/logout`, {
         method: "POST",
         credentials: "include",
       });
-      toast.success("Logged out successfully");
-    } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
-      // Clear user state regardless of API response
       setUser(null);
-      // Clear any auth cookies
-      document.cookie = `${config.auth.cookieName}=; Max-Age=0; path=/;`;
+      toast.success("Logged out!");
       router.push("/login");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        login,
-        logout,
-        isAuthenticated: !!user,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      isAuthenticated: !!user,
+      login,
+      logout,
+      refreshUser,
+    }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Custom hook to use the auth context
+// Hook to use in components
 export const useAuth = () => useContext(AuthContext);
