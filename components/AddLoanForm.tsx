@@ -22,7 +22,8 @@ interface CustomerCheckResponse {
 }
 
 export default function AddLoanForm() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
   const router = useRouter();
 
   const [customerIdNumber, setCustomerIdNumber] = useState("");
@@ -50,10 +51,10 @@ export default function AddLoanForm() {
   const [existingAliases, setExistingAliases] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       router.push("/login");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, loading, router]);
 
   const handleLookup = async () => {
     if (!customerIdNumber) {
