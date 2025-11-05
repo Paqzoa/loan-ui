@@ -49,9 +49,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </NavLink>
               </li>
               <li>
-                <NavLink href="/dashboard/aliases" active={pathname?.startsWith("/dashboard/aliases") ?? false}>
+                <NavLink href="/dashboard/arrears" active={pathname?.startsWith("/dashboard/arrears") ?? false}>
                   <CreditCard className="w-5 h-5" />
-                  <span>Clear Aliases</span>
+                  <span>Clear Arrears</span>
                 </NavLink>
               </li>
               <li>

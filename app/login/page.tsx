@@ -1,18 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
+
+  const { loading: authLoading, isAuthenticated } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+
+
+
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,12 +101,7 @@ export default function LoginPage() {
           {isLoading ? "Signing in..." : "Sign In"}
         </button>
         
-        <div className="text-center text-sm text-gray-600 mt-4">
-          Don't have an account?{" "}
-          <Link href="/register" className="text-green-600 hover:underline">
-            Register here
-          </Link>
-        </div>
+        
       </form>
     </div>
   );

@@ -17,7 +17,7 @@ interface Customer {
 interface CustomerCheckResponse {
   exists: boolean;
   has_active_loan: boolean;
-  has_active_alias: boolean;
+  has_active_arrears: boolean;
   customer: (Customer & { id: number; }) | null;
 }
 
@@ -45,10 +45,10 @@ export default function AddLoanForm() {
   });
 
   const [hasActiveLoan, setHasActiveLoan] = useState(false);
-  const [hasActiveAlias, setHasActiveAlias] = useState(false);
+  const [hasActiveArrears, setHasActiveArrears] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingLoans, setExistingLoans] = useState<any[]>([]);
-  const [existingAliases, setExistingAliases] = useState<any[]>([]);
+  const [existingArrears, setExistingArrears] = useState<any[]>([]);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -76,15 +76,15 @@ export default function AddLoanForm() {
           location: (data.customer as any).location || "",
         });
         toast.success("Customer found and loaded");
-        // Load detailed loans/aliases for conditional UI display
+        // Load detailed loans/arrears for conditional UI display
         try {
           const detail = await api.get(`/customers/by-id-number/${encodeURIComponent(data.customer.id_number)}`);
           const d = (detail as any).data ?? detail;
-          if(d.loans.length > 0) {
+          if (d.loans.length > 0) {
             setHasActiveLoan(true);
           }
-          if(d.aliases.length > 0) {
-            setHasActiveAlias(true);
+          if(d.arrears && d.arrears.length > 0) {
+            setHasActiveArrears(true);
           }
         } catch (_) {}
       } else {
@@ -92,7 +92,7 @@ export default function AddLoanForm() {
         setCustomerForm({ name: "", id_number: "", phone: "", email: "", location: "" });
         toast("Customer not found. Please add new customer details.");
         setExistingLoans([]);
-        setExistingAliases([]);
+        setExistingArrears([]);
       }
       setLookupStatus("success");
     } catch (error: any) {
@@ -114,8 +114,8 @@ export default function AddLoanForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (hasActiveLoan || hasActiveAlias) {
-      toast.error("Customer has active loans or aliases that must be cleared first");
+    if (hasActiveLoan || hasActiveArrears) {
+      toast.error("Customer has active loans or arrears that must be cleared first");
       return;
     }
     setIsSubmitting(true);
@@ -164,12 +164,12 @@ export default function AddLoanForm() {
         <form onSubmit={handleSubmit}>
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">{customerExists ? "Customer Information" : "New Customer Information"}</h2>
-            {(hasActiveLoan || hasActiveAlias) && (
+            {(hasActiveLoan || hasActiveArrears) && (
               <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md">
                 <p className="font-medium">Warning:</p>
                 <ul className="list-disc list-inside">
                   {hasActiveLoan && (<li>Customer has an active loan that must be cleared first</li>)}
-                  {hasActiveAlias && (<li>Customer has an active alias that must be cleared first</li>)}
+                  {hasActiveArrears && (<li>Customer has active arrears that must be cleared first</li>)}
                 </ul>
               </div>
             )}
@@ -197,10 +197,10 @@ export default function AddLoanForm() {
             </div>
           </div>
 
-          {(hasActiveLoan || hasActiveAlias) ? (
+          {(hasActiveLoan || hasActiveArrears) ? (
             <>
               <div className="p-4 rounded-md bg-red-50 border border-red-200 text-red-700">
-                This customer has an existing active loan or alias and cannot be issued another loan.
+                This customer has an existing active loan or arrears and cannot be issued another loan.
               </div>
               {/* Existing details for context */}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -223,18 +223,18 @@ export default function AddLoanForm() {
                   )}
                 </div>
                 <div className="p-4 border rounded-lg">
-                  <div className="font-semibold mb-2">Aliases</div>
-                  {existingAliases.length === 0 ? (
-                    <div className="text-sm text-gray-600">No aliases</div>
+                  <div className="font-semibold mb-2">Arrears</div>
+                  {existingArrears.length === 0 ? (
+                    <div className="text-sm text-gray-600">No arrears</div>
                   ) : (
                     <ul className="space-y-2 text-sm">
-                      {existingAliases.map((a: any) => (
+                      {existingArrears.map((a: any) => (
                         <li key={a.id} className="p-3 border rounded">
                           <div className="flex items-center justify-between">
                             <div className="font-medium">Remaining: KSh {a.remaining_amount}</div>
                             <span className={`text-xs px-2 py-1 rounded-full ${a.is_cleared ? 'bg-gray-100 text-gray-700' : 'bg-red-50 text-red-700'}`}>{a.is_cleared ? 'Cleared' : 'Active'}</span>
                           </div>
-                          <div className="mt-1 text-xs text-gray-600">Alias date: {a.alias_date}</div>
+                          <div className="mt-1 text-xs text-gray-600">Arrears date: {a.arrears_date}</div>
                         </li>
                       ))}
                     </ul>

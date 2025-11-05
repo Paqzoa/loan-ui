@@ -1,6 +1,22 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { useEffect } from "react";
 
 export default function HomePage() {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      // Optional: If you want to automatically redirect, keep this.
+      // If you only want to change the button, remove this block.
+      // router.replace("/dashboard");
+    }
+  }, [authLoading, isAuthenticated, router]);
+
   return (
     <div className="w-full">
       {/* Hero Section */}
@@ -17,12 +33,23 @@ export default function HomePage() {
               Simplify your financial journey with comprehensive loan tracking, smart insights, and a beautiful, responsive experience.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link href="/login" className="bg-white text-blue-700 hover:bg-blue-50 px-6 py-3 rounded-lg font-medium transition-colors shadow-md">
-                Login to Dashboard
-              </Link>
-              <Link href="/register" className="bg-blue-900/30 hover:bg-blue-900/40 backdrop-blur px-6 py-3 rounded-lg font-medium transition-colors border border-white/30">
-                Create Account
-              </Link>
+              {!authLoading && (
+                isAuthenticated ? (
+                  <Link
+                    href="/dashboard"
+                    className="bg-white text-blue-700 hover:bg-blue-50 px-6 py-3 rounded-lg font-medium transition-colors shadow-md"
+                  >
+                    Go to Dashboard
+                  </Link>
+                ) : (
+                  <Link
+                    href="/login"
+                    className="bg-white text-blue-700 hover:bg-blue-50 px-6 py-3 rounded-lg font-medium transition-colors shadow-md"
+                  >
+                    Login to Dashboard
+                  </Link>
+                )
+              )}
             </div>
           </div>
         </div>

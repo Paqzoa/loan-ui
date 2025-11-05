@@ -1,18 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 import { api } from "@/lib/api";
 
 export default function ChangePasswordPage() {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { user } = useAuth();
-  const router = useRouter();
+
+  // Auth guard: redirect to login if session expired
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +39,7 @@ export default function ChangePasswordPage() {
     
     try {
       await api.put("/auth/change-password", {
-        current_password: currentPassword,
+        old_password: currentPassword,
         new_password: newPassword
       });
       
@@ -58,6 +65,20 @@ export default function ChangePasswordPage() {
       setIsLoading(false);
     }
   };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-xl shadow-lg">

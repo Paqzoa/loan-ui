@@ -3,10 +3,31 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Users } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 
 export default function ManageCustomersPage() {
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+
   return (
-    <section>
+    <section className="p-6">
       <h3 className="text-lg font-semibold mb-4">Manage Customers</h3>
       <div className="bg-white p-6 rounded shadow-sm">
         <ManageCustomers />
@@ -17,7 +38,6 @@ export default function ManageCustomersPage() {
 
 function ManageCustomers() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
   const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -35,18 +55,40 @@ function ManageCustomers() {
     load();
   }, []);
 
-  const search = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get(`/customers/search?q=${encodeURIComponent(query)}`);
-      const data = (res as any).data ?? res;
-      setResults((data as any) || []);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filtered = allCustomers.filter((c) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      c.name?.toLowerCase().includes(q) ||
+      c.id_number?.toString().includes(q) ||
+      c.phone?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.location?.toLowerCase().includes(q)
+    );
+  });
 
-  const list = query.trim() ? results : allCustomers;
+  const highlightMatch = (text: string, q: string) => {
+    if (!text) return "";
+    if (!q) return text;
+    const regex = new RegExp(`(${q})`, "gi");
+    const parts = text.split(regex);
+    return (
+      <>
+        {parts.map((part, i) =>
+          part.toLowerCase() === q.toLowerCase() ? (
+            <mark
+              key={i}
+              className="bg-yellow-200 text-gray-900 rounded-sm px-0.5"
+            >
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    );
+  };
 
   return (
     <div>
@@ -55,28 +97,48 @@ function ManageCustomers() {
           <div className="inline-flex items-center justify-center w-9 h-9 rounded bg-green-100 text-green-700">
             <Users className="w-5 h-5" />
           </div>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name / id / phone" className="flex-1 px-3 py-2 border rounded" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name / id / phone / email"
+            className="flex-1 px-3 py-2 border rounded"
+          />
         </div>
-        <button onClick={search} disabled={loading} className="px-4 py-2 bg-green-600 text-white rounded w-full md:w-auto">{loading ? 'Searching...' : 'Search'}</button>
       </div>
 
-      {list.length === 0 ? (
+      {loading ? (
+        <div className="text-gray-600 text-sm">Loading...</div>
+      ) : filtered.length === 0 ? (
         <div className="text-sm text-gray-600">No customers found</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {list.map((c) => (
-            <a key={c.id} href={`/dashboard/customers/${c.id}`} className="group relative block rounded-lg border bg-white p-4 shadow-sm hover:shadow-md transition">
+          {filtered.map((c) => (
+            <a
+              key={c.id}
+              href={`/dashboard/customers/${c.id}`}
+              className="group relative block rounded-lg border bg-white p-4 shadow-sm hover:shadow-md transition"
+            >
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-base font-semibold text-gray-900">{c.name}</div>
-                  <div className="text-xs text-gray-500">{c.id_number}</div>
+                  <div className="text-base font-semibold text-gray-900">
+                    {highlightMatch(c.name || "", query)}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {highlightMatch(c.id_number?.toString() || "", query)}
+                  </div>
                 </div>
-                <span className="text-xs rounded-full px-2 py-1 bg-green-50 text-green-700">Customer</span>
+                <span className="text-xs rounded-full px-2 py-1 bg-green-50 text-green-700">
+                  Customer
+                </span>
               </div>
-              <div className="mt-3 text-sm text-gray-600">{c.phone}{c.email ? ` · ${c.email}` : ''}</div>
-              <div className="mt-2 text-xs text-gray-500">{c.location || '—'}</div>
+              <div className="mt-3 text-sm text-gray-600">
+                {highlightMatch(c.phone || "", query)}
+                {c.email ? <> · {highlightMatch(c.email, query)}</> : ""}
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {highlightMatch(c.location || "—", query)}
+              </div>
 
-              {/* Tooltip */}
               <div className="pointer-events-none absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="rounded bg-gray-900 text-white text-xs px-2 py-1 shadow">
                   Joined: {new Date(c.created_at).toLocaleDateString()}
@@ -89,5 +151,3 @@ function ManageCustomers() {
     </div>
   );
 }
-
-
