@@ -87,26 +87,16 @@ export default function DashboardOverviewPage() {
 
   return (
     <section>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="p-4 bg-white rounded shadow-sm">
-          <div className="text-sm text-gray-500">Active Loans</div>
-          <div className="mt-2 text-2xl font-extrabold text-blue-900">{metrics.activeLoans}</div>
-          <div className="mt-1 text-sm text-blue-900 font-semibold">Outstanding Balances: KSh {metrics.loansOutstanding.toLocaleString()}</div>
-        </div>
-        <div className="p-4 bg-white rounded shadow-sm">
-          <div className="text-sm text-gray-500">Arrears</div>
-          <div className="mt-2 text-2xl font-extrabold text-red-700">{metrics.arrears}</div>
-          <div className="mt-1 text-sm text-red-700 font-semibold">Remaining: KSh {metrics.arrearsOutstanding.toLocaleString()}</div>
-        </div>
-        <div className="p-4 bg-white rounded shadow-sm">
-          <div className="text-sm text-gray-500">Overview</div>
-          <div className="mt-2 text-sm text-gray-600">Quick summary and actions</div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <StatCard label="Active Loans" value={metrics.activeLoans} color="text-blue-700" accent="bg-blue-50" />
+        <StatCard label="Active Loans Outstanding" prefix="KSh " value={metrics.loansOutstanding} color="text-blue-900" accent="bg-blue-50" />
+        <StatCard label="Active Arrears" value={metrics.arrears} color="text-rose-700" accent="bg-rose-50" />
+        <StatCard label="Arrears Remaining" prefix="KSh " value={metrics.arrearsOutstanding} color="text-rose-900" accent="bg-rose-50" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded shadow-sm">
-          <h3 className="mb-3 font-semibold">Returns & Interest (last 3 months)</h3>
+          <h3 className="mb-3 font-semibold">Returns & Interest (Completed Loans, last 3 months)</h3>
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
               <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -126,24 +116,12 @@ export default function DashboardOverviewPage() {
           {!summary ? (
             <div className="text-sm text-gray-600">Loading...</div>
           ) : (
-            <ul className="mt-2 space-y-2 text-sm">
-              <li>
-                <span className="text-gray-600">Completed loans this month:</span>
-                <span className="ml-2 font-semibold text-gray-900">KSh {summary.completed_loans_amount_this_month.toLocaleString()}</span>
-              </li>
-              <li>
-                <span className="text-gray-600">Active loans started this month:</span>
-                <span className="ml-2 font-semibold text-gray-900">{summary.active_loans_count_this_month}</span>
-              </li>
-              <li>
-                <span className="text-gray-600">Interest gained (last 3 months):</span>
-                <span className="ml-2 font-semibold text-gray-900">KSh {summary.interest_last_three_months.toLocaleString()}</span>
-              </li>
-              <li>
-                <span className="text-gray-600">Arrears (last 3 months):</span>
-                <span className="ml-2 font-semibold text-gray-900">{summary.arrears_count_last_three_months}</span>
-              </li>
-            </ul>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <StatCard label="Completed Loans (This Month)" prefix="KSh " value={summary.completed_loans_amount_this_month} color="text-emerald-700" accent="bg-emerald-50" />
+              <StatCard label="Active Loans (Started This Month)" value={summary.active_loans_count_this_month} color="text-blue-700" accent="bg-blue-50" />
+              <StatCard label="Interest (Completed, Last 3 Months)" prefix="KSh " value={summary.interest_last_three_months} color="text-indigo-700" accent="bg-indigo-50" />
+              <StatCard label="Arrears (Last 3 Months)" value={summary.arrears_count_last_three_months} color="text-rose-700" accent="bg-rose-50" />
+            </div>
           )}
         </div>
       </div>
@@ -151,4 +129,31 @@ export default function DashboardOverviewPage() {
   );
 }
 
+// Animated counter used in overview
+function StatCard({ label, value, prefix = "", color = "text-gray-900", accent = "bg-gray-50" }: { label: string; value: number; prefix?: string; color?: string; accent?: string; }) {
+  const [display, setDisplay] = React.useState(0);
+  React.useEffect(() => {
+    const duration = 1200;
+    const start = performance.now();
+    const from = 0;
+    const to = Number(value || 0);
+    const step = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    const raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  const formatted = new Intl.NumberFormat().format(display);
+
+  return (
+    <div className={`p-5 rounded-lg border shadow-sm ${accent}`}>
+      <div className="text-sm text-gray-500">{label}</div>
+      <div className={`mt-2 text-2xl font-bold ${color}`}>{prefix}{formatted}</div>
+    </div>
+  );
+}
 

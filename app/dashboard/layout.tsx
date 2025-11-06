@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Home, PlusCircle, CreditCard, Users } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -79,7 +81,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <h2 className="text-xl font-semibold">Dashboard</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">Signed in as <span className="font-medium">You</span></div>
+              <div className="text-sm text-gray-600">
+                Signed in as <span className="font-medium">{user?.username || "User"}</span>
+              </div>
             </div>
           </div>
         </header>

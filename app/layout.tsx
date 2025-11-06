@@ -2,11 +2,16 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScrollToTop from "@/components/ScrollToTop";
+import InstallPWA from "@/components/InstallPWA";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import Providers from "./providers";
 
 export const metadata = {
   title: "Loan Management System",
   description: "Personal loan tracking and statistics app",
+  manifest: "/manifest.json",
+  themeColor: "#16a34a",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
 };
 
 export default function RootLayout({
@@ -17,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="flex flex-col min-h-screen w-full bg-gradient-to-br from-green-50 via-white to-green-100 text-slate-800">
+        <ServiceWorkerRegistration />
         <Providers>
           <Navbar />
           <div className="flex-grow flex flex-col">
@@ -24,6 +30,7 @@ export default function RootLayout({
             <Footer />
           </div>
           <ScrollToTop />
+          <InstallPWA />
         </Providers>
       </body>
     </html>

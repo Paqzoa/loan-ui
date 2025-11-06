@@ -15,6 +15,29 @@ export default function CustomerDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
+  // Derived summary metrics
+  const now = new Date();
+  const threeMonthsAgo = new Date(now);
+  threeMonthsAgo.setMonth(now.getMonth() - 3);
+
+  const loans = (data?.loans as any[]) || [];
+  const arrears = (data?.arrears as any[]) || [];
+  const statusOf = (s: any) => String(s || "").toUpperCase();
+  const isCompleted = (l: any) => statusOf(l.status) === "COMPLETED";
+  const isActive = (l: any) => ["ACTIVE", "OVERDUE", "ARREARS"].includes(statusOf(l.status));
+  const parseDate = (d: any) => (d ? new Date(d) : null);
+  const within3M = (d: any) => {
+    const dt = parseDate(d);
+    return !!dt && dt >= threeMonthsAgo && dt <= now;
+  };
+
+  const completedLoans = loans.filter(isCompleted);
+  const completedLast3M = completedLoans.filter((l) => within3M(l.due_date || l.start_date));
+  const interestOfLoan = (l: any) => Math.max(0, Number(l.total_amount ?? 0) - Number(l.amount ?? 0));
+  const interest3MCompleted = completedLast3M.reduce((sum, l) => sum + interestOfLoan(l), 0);
+  const activeLoansCount = loans.filter(isActive).length;
+  const totalArrearsRemaining = arrears.reduce((sum, a) => sum + Number(a.remaining_amount ?? 0), 0);
+
   // Auth guard: redirect to login if session expired
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -77,6 +100,29 @@ export default function CustomerDetailsPage() {
 
   return (
     <section className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          label="3-Month Interest (Completed Loans)"
+          value={interest3MCompleted}
+          prefix="KSh "
+          color="text-blue-600"
+          accent="bg-blue-50"
+        />
+        <StatCard
+          label="Active Loans"
+          value={activeLoansCount}
+          color="text-emerald-600"
+          accent="bg-emerald-50"
+        />
+        <StatCard
+          label="Total Arrears Remaining"
+          value={totalArrearsRemaining}
+          prefix="KSh "
+          color="text-rose-600"
+          accent="bg-rose-50"
+        />
+      </div>
       {/* Customer Info */}
       <div className="bg-white p-6 rounded shadow-sm">
         <h3 className="text-lg font-semibold">Customer Details</h3>
@@ -97,14 +143,36 @@ export default function CustomerDetailsPage() {
       <Section title="Loans" data={data.loans} render={(l: any) => (
         <div key={l.id} className="p-4 border rounded-lg hover:shadow">
           <div className="flex items-center justify-between">
-            <div className="font-semibold text-gray-900">KSh {l.amount}</div>
+          <div className="font-semibold text-gray-900">KSh {l.amount}</div>
+            
             <span className="text-xs px-2 py-1 rounded-full bg-green-50 text-green-700">
               {l.status}
             </span>
           </div>
-          <div className="mt-2 text-sm text-gray-600">
-            Interest: {l.interest_rate}%
-          </div>
+          {(() => {
+            const isCompleted = String(l.status || "").toUpperCase() === "COMPLETED";
+            const interestGained = isCompleted ? (Number(l.total_amount ?? 0) - Number(l.amount ?? 0)) : 0;
+            return (
+              <>
+                <div className="font-semibold text-green-600">
+                  {isCompleted ? (
+                    <>Returns (After Interest): KSh {l.total_amount}</>
+                  ) : (
+                    <>Returns (After Interest): -</>
+                  )}
+                </div>
+                <div className="font-semibold text-blue-600">
+                  {isCompleted ? (
+                    <>Interest Gained: KSh {interestGained}</>
+                  ) : (
+                    <>Interest Gained: -</>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+          <div className="font-semibold text-red-600">Unpaid: KSh {l.remaining_amount}</div>
+          <div className="mt-2 text-sm text-gray-600">Interest Rate: {l.interest_rate}%</div>
           <div className="mt-1 text-xs text-gray-500">
             Start: {l.start_date} · Due: {l.due_date}
           </div>
@@ -163,7 +231,7 @@ export default function CustomerDetailsPage() {
                   Date: {i.payment_date}
                 </div>
                 <div className="mt-1 text-xs text-gray-400">
-                  Loan ID: {i.loan_id}
+                  Associated with Loan ID: {i.loan_id}
                 </div>
               </div>
             ))}
@@ -194,6 +262,34 @@ function Section({ title, data, render }: any) {
           {data.map(render)}
         </div>
       )}
+    </div>
+  );
+}
+
+// Animated counter for summary stats
+function StatCard({ label, value, prefix = "", color = "text-gray-900", accent = "bg-gray-50" }: { label: string; value: number; prefix?: string; color?: string; accent?: string; }) {
+  const [display, setDisplay] = React.useState(0);
+  React.useEffect(() => {
+    const duration = 1200;
+    const start = performance.now();
+    const from = 0;
+    const to = Number(value || 0);
+    const step = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    const raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  const formatted = new Intl.NumberFormat().format(display);
+
+  return (
+    <div className={`p-5 rounded-lg border shadow-sm ${accent}`}>
+      <div className="text-sm text-gray-500">{label}</div>
+      <div className={`mt-2 text-2xl font-bold ${color}`}>{prefix}{formatted}</div>
     </div>
   );
 }
