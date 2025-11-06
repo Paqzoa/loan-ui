@@ -16,8 +16,12 @@ export default function Navbar() {
     <nav className="backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/60 text-slate-800 shadow-md sticky top-0 z-40">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
-          <Link href="/" className="font-semibold text-xl flex items-center text-slate-900">
-            <span className="mr-2">💰</span>
+          <Link href="/" className="font-semibold text-xl flex items-center text-slate-900 hover:opacity-80 transition-opacity">
+            <img 
+              src="/icon-192.png" 
+              alt="Loan Management System" 
+              className="w-8 h-8 mr-2 rounded"
+            />
             <span>Loan System</span>
           </Link>
 
@@ -38,7 +42,6 @@ export default function Navbar() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">
             <Link href="/" className="hover:text-green-600 transition-colors">Home</Link>
-            <Link href="/about" className="hover:text-green-600 transition-colors">About</Link>
             
             {isAuthenticated && (
               <>
