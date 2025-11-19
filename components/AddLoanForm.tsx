@@ -10,14 +10,13 @@ interface Customer {
   name: string;
   id_number: string;
   phone: string;
-  email?: string;
   location?: string;
 }
 
 interface CustomerCheckResponse {
   exists: boolean;
   has_active_loan: boolean;
-  has_active_arrears: boolean;
+  has_overdue_loans: boolean;
   customer: (Customer & { id: number; }) | null;
 }
 
@@ -34,21 +33,28 @@ export default function AddLoanForm() {
     name: "",
     id_number: "",
     phone: "",
-    email: "",
     location: "",
   });
 
   const [loanForm, setLoanForm] = useState({
     amount: "",
-    interest_rate: "",
+    interest_rate: "20",
     start_date: new Date().toISOString().split("T")[0],
   });
 
+  const [guarantorForm, setGuarantorForm] = useState({
+    name: "",
+    id_number: "",
+    phone: "",
+    location: "",
+    relationship: "",
+  });
+
   const [hasActiveLoan, setHasActiveLoan] = useState(false);
-  const [hasActiveArrears, setHasActiveArrears] = useState(false);
+  const [hasOverdueLoans, setHasOverdueLoans] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingLoans, setExistingLoans] = useState<any[]>([]);
-  const [existingArrears, setExistingArrears] = useState<any[]>([]);
+  const [existingOverdue, setExistingOverdue] = useState<any[]>([]);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -64,15 +70,14 @@ export default function AddLoanForm() {
     setLookupStatus("loading");
     try {
       const data = await api.post<CustomerCheckResponse>("/customers/check", { id_number: customerIdNumber });
-    //   setHasActiveLoan(data.has_active_loan);
-    //   setHasActiveAlias(data.has_active_alias);
+      setHasActiveLoan(!!data.has_active_loan);
+      setHasOverdueLoans(!!data.has_overdue_loans);
       if (data.exists && data.customer) {
         setCustomerExists(true);
         setCustomerForm({
           name: data.customer.name,
           id_number: data.customer.id_number,
           phone: data.customer.phone,
-          email: data.customer.email || "",
           location: (data.customer as any).location || "",
         });
         toast.success("Customer found and loaded");
@@ -80,19 +85,33 @@ export default function AddLoanForm() {
         try {
           const detail = await api.get(`/customers/by-id-number/${encodeURIComponent(data.customer.id_number)}`);
           const d = (detail as any).data ?? detail;
-          if (d.loans.length > 0) {
-            setHasActiveLoan(true);
+          if (Array.isArray(d.loans)) {
+            setExistingLoans(d.loans);
+            const activeLoanExists = d.loans.some((l: any) => (l.status || "").toLowerCase() === "active");
+            if (activeLoanExists) {
+              setHasActiveLoan(true);
+            }
+          } else {
+            setExistingLoans([]);
           }
-          if(d.arrears && d.arrears.length > 0) {
-            setHasActiveArrears(true);
+          if (Array.isArray(d.arrears)) {
+            setExistingOverdue(d.arrears);
+            const overdueExists = d.arrears.some((a: any) => !a.is_cleared);
+            if (overdueExists) {
+              setHasOverdueLoans(true);
+            }
+          } else {
+            setExistingOverdue([]);
           }
         } catch (_) {}
       } else {
         setCustomerExists(false);
-        setCustomerForm({ name: "", id_number: "", phone: "", email: "", location: "" });
+        setCustomerForm({ name: "", id_number: "", phone: "", location: "" });
         toast("Customer not found. Please add new customer details.");
         setExistingLoans([]);
-        setExistingArrears([]);
+        setExistingOverdue([]);
+        setHasActiveLoan(false);
+        setHasOverdueLoans(false);
       }
       setLookupStatus("success");
     } catch (error: any) {
@@ -112,10 +131,15 @@ export default function AddLoanForm() {
     setLoanForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleGuarantorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setGuarantorForm((prev) => ({ ...prev, [name]: value }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (hasActiveLoan || hasActiveArrears) {
-      toast.error("Customer has active loans or arrears that must be cleared first");
+    if (hasActiveLoan || hasOverdueLoans) {
+      toast.error("Customer has active loans or overdue balances that must be cleared first");
       return;
     }
     setIsSubmitting(true);
@@ -128,12 +152,23 @@ export default function AddLoanForm() {
         }
         await api.post<{ id: number }>("/customers", customerForm);
       }
-      await api.post("/loans", {
+      const loanData: any = {
         id_number: customerForm.id_number,
         amount: parseFloat(loanForm.amount),
         interest_rate: parseFloat(loanForm.interest_rate),
         start_date: loanForm.start_date,
-      });
+      };
+
+      // Always include guarantor (required)
+      loanData.guarantor = {
+        name: guarantorForm.name,
+        id_number: guarantorForm.id_number,
+        phone: guarantorForm.phone,
+        location: guarantorForm.location || undefined,
+        relationship: guarantorForm.relationship || undefined,
+      };
+
+      await api.post("/loans", loanData);
       toast.success("Loan created successfully");
       router.push("/dashboard");
     } catch (error: any) {
@@ -164,12 +199,12 @@ export default function AddLoanForm() {
         <form onSubmit={handleSubmit}>
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">{customerExists ? "Customer Information" : "New Customer Information"}</h2>
-            {(hasActiveLoan || hasActiveArrears) && (
+            {(hasActiveLoan || hasOverdueLoans) && (
               <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md">
                 <p className="font-medium">Warning:</p>
                 <ul className="list-disc list-inside">
                   {hasActiveLoan && (<li>Customer has an active loan that must be cleared first</li>)}
-                  {hasActiveArrears && (<li>Customer has active arrears that must be cleared first</li>)}
+                  {hasOverdueLoans && (<li>Customer has overdue balances that must be cleared first</li>)}
                 </ul>
               </div>
             )}
@@ -187,20 +222,16 @@ export default function AddLoanForm() {
                 <input type="tel" id="phone" name="phone" value={customerForm.phone} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter phone number" required readOnly={customerExists} />
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                <input type="email" id="email" name="email" value={customerForm.email} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter email address (optional)" readOnly={customerExists} />
-              </div>
-              <div>
                 <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                 <input type="text" id="location" name="location" value={customerForm.location} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter location" required readOnly={customerExists} />
               </div>
             </div>
           </div>
 
-          {(hasActiveLoan || hasActiveArrears) ? (
+          {(hasActiveLoan || hasOverdueLoans) ? (
             <>
               <div className="p-4 rounded-md bg-red-50 border border-red-200 text-red-700">
-                This customer has an existing active loan or arrears and cannot be issued another loan.
+                This customer has an existing active loan or overdue balance and cannot be issued another loan.
               </div>
               {/* Existing details for context */}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -223,18 +254,18 @@ export default function AddLoanForm() {
                   )}
                 </div>
                 <div className="p-4 border rounded-lg">
-                  <div className="font-semibold mb-2">Arrears</div>
-                  {existingArrears.length === 0 ? (
-                    <div className="text-sm text-gray-600">No arrears</div>
+                  <div className="font-semibold mb-2">Overdue</div>
+                  {existingOverdue.length === 0 ? (
+                    <div className="text-sm text-gray-600">No overdue balances</div>
                   ) : (
                     <ul className="space-y-2 text-sm">
-                      {existingArrears.map((a: any) => (
+                      {existingOverdue.map((a: any) => (
                         <li key={a.id} className="p-3 border rounded">
                           <div className="flex items-center justify-between">
                             <div className="font-medium">Remaining: KSh {a.remaining_amount}</div>
                             <span className={`text-xs px-2 py-1 rounded-full ${a.is_cleared ? 'bg-gray-100 text-gray-700' : 'bg-red-50 text-red-700'}`}>{a.is_cleared ? 'Cleared' : 'Active'}</span>
                           </div>
-                          <div className="mt-1 text-xs text-gray-600">Arrears date: {a.arrears_date}</div>
+                          <div className="mt-1 text-xs text-gray-600">Overdue since: {a.arrears_date}</div>
                         </li>
                       ))}
                     </ul>
@@ -251,13 +282,94 @@ export default function AddLoanForm() {
                     <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">Loan Amount</label>
                     <input type="number" id="amount" name="amount" value={loanForm.amount} onChange={handleLoanChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter loan amount" required min="1" step="0.01" />
                   </div>
-                  <div>
-                    <label htmlFor="interest_rate" className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (%)</label>
-                    <input type="number" id="interest_rate" name="interest_rate" value={loanForm.interest_rate} onChange={handleLoanChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter interest rate" required min="0" max="100" step="0.01" />
-                  </div>
+              <div>
+                <label htmlFor="interest_rate" className="block text-sm font-medium text-gray-700 mb-1">Interest Rate (%)</label>
+                <input
+                  type="number"
+                  id="interest_rate"
+                  name="interest_rate"
+                  value={loanForm.interest_rate}
+                  readOnly
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-500 bg-gray-100 cursor-not-allowed"
+                />
+              </div>
                   <div>
                     <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                     <input type="date" id="start_date" name="start_date" value={loanForm.start_date} onChange={handleLoanChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" required />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold mb-4">Guarantor Information</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="guarantor_name" className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      id="guarantor_name"
+                      name="name"
+                      value={guarantorForm.name}
+                      onChange={handleGuarantorChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500"
+                      placeholder="Enter guarantor full name"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="guarantor_id_number" className="block text-sm font-medium text-gray-700 mb-1">ID Number *</label>
+                    <input
+                      type="text"
+                      id="guarantor_id_number"
+                      name="id_number"
+                      value={guarantorForm.id_number}
+                      onChange={handleGuarantorChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500"
+                      placeholder="Enter guarantor ID number"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="guarantor_phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                    <input
+                      type="tel"
+                      id="guarantor_phone"
+                      name="phone"
+                      value={guarantorForm.phone}
+                      onChange={handleGuarantorChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500"
+                      placeholder="Enter guarantor phone number"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="guarantor_relationship" className="block text-sm font-medium text-gray-700 mb-1">Relationship</label>
+                    <select
+                      id="guarantor_relationship"
+                      name="relationship"
+                      value={guarantorForm.relationship}
+                      onChange={handleGuarantorChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="">Select relationship</option>
+                      <option value="Family">Family</option>
+                      <option value="Friend">Friend</option>
+                      <option value="Colleague">Colleague</option>
+                      <option value="Business Partner">Business Partner</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="guarantor_location" className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <input
+                      type="text"
+                      id="guarantor_location"
+                      name="location"
+                      value={guarantorForm.location}
+                      onChange={handleGuarantorChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500"
+                      placeholder="Enter guarantor location (optional)"
+                    />
                   </div>
                 </div>
               </div>

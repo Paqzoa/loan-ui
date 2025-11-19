@@ -9,8 +9,10 @@ import { useRouter } from "next/navigation";
 interface DashboardMetrics {
   active_loans: number;
   active_loans_outstanding: number;
-  active_arrears: number;
-  active_arrears_outstanding: number;
+  overdue_loans?: number;
+  overdue_outstanding?: number;
+  active_arrears?: number;
+  active_arrears_outstanding?: number;
 }
 
 interface TrendData {
@@ -23,13 +25,14 @@ interface SummaryMetrics {
   completed_loans_amount_this_month: number;
   active_loans_count_this_month: number;
   interest_last_three_months: number;
-  arrears_count_last_three_months: number;
+  overdue_count_last_three_months?: number;
+  arrears_count_last_three_months?: number;
 }
 
 export default function DashboardOverviewPage() {
   const { loading: authLoading, isAuthenticated } = useAuth();
   const router = useRouter();
-  const [metrics, setMetrics] = useState({ activeLoans: 0, loansOutstanding: 0, arrears: 0, arrearsOutstanding: 0 });
+  const [metrics, setMetrics] = useState({ activeLoans: 0, loansOutstanding: 0, overdue: 0, overdueOutstanding: 0 });
   const [chartData, setChartData] = useState<TrendData[]>([]);
   const [summary, setSummary] = useState<SummaryMetrics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,8 +64,8 @@ export default function DashboardOverviewPage() {
       setMetrics({
         activeLoans: (m as any)?.active_loans ?? 0,
         loansOutstanding: (m as any)?.active_loans_outstanding ?? 0,
-        arrears: (m as any)?.active_arrears ?? 0,
-        arrearsOutstanding: (m as any)?.active_arrears_outstanding ?? 0,
+        overdue: (m as any)?.overdue_loans ?? (m as any)?.active_arrears ?? 0,
+        overdueOutstanding: (m as any)?.overdue_outstanding ?? (m as any)?.active_arrears_outstanding ?? 0,
       });
       setChartData(trends);
       setSummary(((summaryRes as any).data ?? summaryRes) as SummaryMetrics);
@@ -85,13 +88,15 @@ export default function DashboardOverviewPage() {
     return null;
   }
 
+  const overdueSummaryCount = summary ? (summary.overdue_count_last_three_months ?? summary.arrears_count_last_three_months ?? 0) : 0;
+
   return (
     <section>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <StatCard label="Active Loans" value={metrics.activeLoans} color="text-blue-700" accent="bg-blue-50" />
         <StatCard label="Active Loans Outstanding" prefix="KSh " value={metrics.loansOutstanding} color="text-blue-900" accent="bg-blue-50" />
-        <StatCard label="Active Arrears" value={metrics.arrears} color="text-rose-700" accent="bg-rose-50" />
-        <StatCard label="Arrears Remaining" prefix="KSh " value={metrics.arrearsOutstanding} color="text-rose-900" accent="bg-rose-50" />
+        <StatCard label="Overdue Loans" value={metrics.overdue} color="text-rose-700" accent="bg-rose-50" />
+        <StatCard label="Overdue Remaining" prefix="KSh " value={metrics.overdueOutstanding} color="text-rose-900" accent="bg-rose-50" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -120,7 +125,7 @@ export default function DashboardOverviewPage() {
               <StatCard label="Completed Loans (This Month)" prefix="KSh " value={summary.completed_loans_amount_this_month} color="text-emerald-700" accent="bg-emerald-50" />
               <StatCard label="Active Loans (Started This Month)" value={summary.active_loans_count_this_month} color="text-blue-700" accent="bg-blue-50" />
               <StatCard label="Interest (Completed, Last 3 Months)" prefix="KSh " value={summary.interest_last_three_months} color="text-indigo-700" accent="bg-indigo-50" />
-              <StatCard label="Arrears (Last 3 Months)" value={summary.arrears_count_last_three_months} color="text-rose-700" accent="bg-rose-50" />
+              <StatCard label="Overdue (Last 3 Months)" value={overdueSummaryCount} color="text-rose-700" accent="bg-rose-50" />
             </div>
           )}
         </div>

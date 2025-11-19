@@ -23,8 +23,8 @@ function PayInstallmentForm() {
     });
   };
 
-  // Check if customer has overdue or arrears loans
-  const hasOverdueOrArrearsLoan = (cust: any | null) => {
+  // Check if customer has overdue loans
+  const hasOverdueLoan = (cust: any | null) => {
     if (!cust || !Array.isArray(cust.loans)) return false;
     return cust.loans.some((l: any) => {
       const status = (l.status || '').toLowerCase();
@@ -92,6 +92,10 @@ function PayInstallmentForm() {
                 {(customer.loans || []).map((l: any) => {
                   const status = (l.status || '').toLowerCase();
                   const isOverdueOrArrears = status === 'overdue' || status === 'arrears';
+                  const weeklyProgress = l.weekly_progress || {};
+                  const weeklyDue = Number(weeklyProgress.weekly_due_amount ?? l.weekly_due_amount ?? 0);
+                  const weeksElapsed = Number(weeklyProgress.weeks_elapsed ?? weeklyProgress.weeksElapsed ?? 0);
+                  const arrearsAmount = Number(weeklyProgress.arrears_amount ?? l.weekly_arrears ?? 0);
                   return (
                     <div key={l.id} className={`p-3 border rounded ${isOverdueOrArrears ? 'bg-yellow-50 border-yellow-200' : ''}`}>
                       <div className="flex items-center justify-between">
@@ -104,9 +108,16 @@ function PayInstallmentForm() {
                       </div>
                       <div className="mt-1 text-xs text-gray-600">Interest: {l.interest_rate}% · Start: {l.start_date} · Due: {l.due_date}</div>
                       <div className="mt-1 text-xs text-gray-600">Remaining Amount: KSh {l.remaining_amount}</div>
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div>Weekly Allocation: KSh {weeklyDue.toFixed(2)}</div>
+                        <div>Weeks Elapsed: {weeksElapsed} / 4</div>
+                        <div className={`${arrearsAmount > 0 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+                          Weekly Arrears: KSh {arrearsAmount.toFixed(2)}
+                        </div>
+                      </div>
                       {isOverdueOrArrears && (
                         <div className="mt-2 text-xs text-yellow-700 font-medium">
-                          ⚠️ This loan must be paid through the Arrears page
+                          ⚠️ This loan must be paid through the Overdue page
                         </div>
                       )}
                     </div>
@@ -120,11 +131,11 @@ function PayInstallmentForm() {
                 <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2 border rounded mt-1 mb-3" />
                 <button onClick={() => handlePay()} disabled={loading || !amount} className="px-4 py-2 bg-green-600 text-white rounded">Record Payment</button>
               </div>
-            ) : hasOverdueOrArrearsLoan(customer) ? (
+            ) : hasOverdueLoan(customer) ? (
               <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="text-sm text-yellow-800 font-medium mb-1">⚠️ Overdue/Arrears Loan Detected</div>
+                <div className="text-sm text-yellow-800 font-medium mb-1">⚠️ Overdue Loan Detected</div>
                 <div className="text-xs text-yellow-700">
-                  Loans that are overdue or in arrears must be paid through the <span className="font-semibold">Arrears</span> page, not here.
+                  Loans that are overdue must be paid through the <span className="font-semibold">Overdue</span> page, not here.
                 </div>
               </div>
             ) : (

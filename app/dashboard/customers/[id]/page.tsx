@@ -14,6 +14,8 @@ export default function CustomerDetailsPage() {
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [editingInstallmentId, setEditingInstallmentId] = useState<number | null>(null);
+  const [installmentAmounts, setInstallmentAmounts] = useState<Record<number, string>>({});
 
   // Derived summary metrics
   const now = new Date();
@@ -21,7 +23,7 @@ export default function CustomerDetailsPage() {
   threeMonthsAgo.setMonth(now.getMonth() - 3);
 
   const loans = (data?.loans as any[]) || [];
-  const arrears = (data?.arrears as any[]) || [];
+  const overdueRecords = (data?.arrears as any[]) || [];
   const statusOf = (s: any) => String(s || "").toUpperCase();
   const isCompleted = (l: any) => statusOf(l.status) === "COMPLETED";
   const isActive = (l: any) => ["ACTIVE", "OVERDUE", "ARREARS"].includes(statusOf(l.status));
@@ -36,7 +38,7 @@ export default function CustomerDetailsPage() {
   const interestOfLoan = (l: any) => Math.max(0, Number(l.total_amount ?? 0) - Number(l.amount ?? 0));
   const interest3MCompleted = completedLast3M.reduce((sum, l) => sum + interestOfLoan(l), 0);
   const activeLoansCount = loans.filter(isActive).length;
-  const totalArrearsRemaining = arrears.reduce((sum, a) => sum + Number(a.remaining_amount ?? 0), 0);
+  const totalOverdueRemaining = overdueRecords.reduce((sum, a) => sum + Number(a.remaining_amount ?? 0), 0);
 
   // Auth guard: redirect to login if session expired
   useEffect(() => {
@@ -86,6 +88,38 @@ export default function CustomerDetailsPage() {
     }
   };
 
+  const handleEditInstallment = (inst: any) => {
+    setEditingInstallmentId(inst.id);
+    setInstallmentAmounts((prev) => ({
+      ...prev,
+      [inst.id]: String(inst.amount ?? ""),
+    }));
+  };
+
+  const handleSaveInstallment = async (inst: any) => {
+    const raw = installmentAmounts[inst.id];
+    const amt = parseFloat(raw);
+    if (!amt || amt <= 0) {
+      alert("Enter a valid amount");
+      return;
+    }
+    try {
+      await api.put(`/payments/installments/${inst.id}`, { amount: amt });
+      // Optimistically update local state
+      setData((prev: any) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        updated.installments = (updated.installments || []).map((i: any) =>
+          i.id === inst.id ? { ...i, amount: amt } : i
+        );
+        return updated;
+      });
+      setEditingInstallmentId(null);
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || e?.message || "Failed to update installment");
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -116,8 +150,8 @@ export default function CustomerDetailsPage() {
           accent="bg-emerald-50"
         />
         <StatCard
-          label="Total Arrears Remaining"
-          value={totalArrearsRemaining}
+          label="Total Overdue Remaining"
+          value={totalOverdueRemaining}
           prefix="KSh "
           color="text-rose-600"
           accent="bg-rose-50"
@@ -179,8 +213,8 @@ export default function CustomerDetailsPage() {
         </div>
       )} />
 
-      {/* Arrears Section */}
-      <Section title="Arrears" data={data.arrears} render={(a: any) => (
+      {/* Overdue Section */}
+      <Section title="Overdue" data={data.arrears} render={(a: any) => (
         <div key={a.id} className="p-4 border rounded-lg hover:shadow">
           <div className="flex items-center justify-between">
             <div className="font-semibold text-gray-900">
@@ -200,7 +234,7 @@ export default function CustomerDetailsPage() {
             Original: KSh {a.original_amount}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            Arrears date: {a.arrears_date}
+            Overdue since: {a.arrears_date}
           </div>
         </div>
       )} />
@@ -224,8 +258,37 @@ export default function CustomerDetailsPage() {
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {(data.installments || []).map((i: any) => (
               <div key={i.id} className="p-4 border rounded-lg hover:shadow">
-                <div className="font-semibold text-gray-900">
-                  Paid: KSh {i.amount}
+                <div className="flex items-center justify-between gap-2">
+                  {editingInstallmentId === i.id ? (
+                    <>
+                      <input
+                        type="number"
+                        value={installmentAmounts[i.id] ?? ""}
+                        onChange={(e) =>
+                          setInstallmentAmounts((prev) => ({ ...prev, [i.id]: e.target.value }))
+                        }
+                        className="px-2 py-1 border rounded text-sm w-28"
+                      />
+                      <button
+                        onClick={() => handleSaveInstallment(i)}
+                        className="text-xs px-2 py-1 rounded bg-green-600 text-white"
+                      >
+                        Save
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-semibold text-gray-900">
+                        Paid: KSh {i.amount}
+                      </div>
+                      <button
+                        onClick={() => handleEditInstallment(i)}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Edit
+                      </button>
+                    </>
+                  )}
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
                   Date: {i.payment_date}
