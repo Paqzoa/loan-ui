@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
+import config from "@/lib/config";
 import toast from "react-hot-toast";
 
 interface Customer {
@@ -18,6 +19,11 @@ interface CustomerCheckResponse {
   has_active_loan: boolean;
   has_overdue_loans: boolean;
   customer: (Customer & { id: number; }) | null;
+}
+
+interface CreatedLoanResponse {
+  id: number;
+  document_url?: string;
 }
 
 export default function AddLoanForm() {
@@ -168,8 +174,14 @@ export default function AddLoanForm() {
         relationship: guarantorForm.relationship || undefined,
       };
 
-      await api.post("/loans", loanData);
+      const createdLoan = await api.post<CreatedLoanResponse>("/loans", loanData);
       toast.success("Loan created successfully");
+      if (typeof window !== "undefined" && createdLoan?.id) {
+        const printablePath =
+          createdLoan.document_url ?? `/loans/${createdLoan.id}/printable`;
+        const pdfUrl = `${config.api.baseUrl}${printablePath}`;
+        window.open(pdfUrl, "_blank", "noopener,noreferrer");
+      }
       router.push("/dashboard");
     } catch (error: any) {
       const message = error?.message || error?.response?.data?.detail || "Failed to create loan";
