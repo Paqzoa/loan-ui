@@ -40,6 +40,7 @@ function ManageCustomers() {
   const [query, setQuery] = useState("");
   const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const FALLBACK_AVATAR = "/avatar-placeholder.svg";
 
   useEffect(() => {
     const load = async () => {
@@ -118,13 +119,26 @@ function ManageCustomers() {
               href={`/dashboard/customers/${c.id}`}
               className="group relative block rounded-lg border bg-white p-4 shadow-sm hover:shadow-md transition"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-base font-semibold text-gray-900">
-                    {highlightMatch(c.name || "", query)}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full border bg-gray-100 overflow-hidden">
+                    <img
+                      src={c.profile_image_url || FALLBACK_AVATAR}
+                      alt={`${c.name || "Customer"} avatar`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = FALLBACK_AVATAR;
+                      }}
+                    />
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {highlightMatch(c.id_number?.toString() || "", query)}
+                  <div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {highlightMatch(c.name || "", query)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {highlightMatch(c.id_number?.toString() || "", query)}
+                    </div>
                   </div>
                 </div>
                 <span className="text-xs rounded-full px-2 py-1 bg-green-50 text-green-700">

@@ -10,6 +10,7 @@ export default function CustomerDetailsPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const customerId = params?.id as string;
+  const AVATAR_PLACEHOLDER = "/avatar-placeholder.svg";
 
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,16 +161,31 @@ export default function CustomerDetailsPage() {
       {/* Customer Info */}
       <div className="bg-white p-6 rounded shadow-sm">
         <h3 className="text-lg font-semibold">Customer Details</h3>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <Info label="Name" value={data.name} />
-          <Info label="ID Number" value={data.id_number} />
-          <Info label="Phone" value={data.phone} />
-          <Info label="Email" value={data.email || "-"} />
-          <Info label="Location" value={data.location || "-"} />
-          <Info
-            label="Joined"
-            value={new Date(data.created_at).toLocaleDateString()}
-          />
+        <div className="mt-4 flex flex-col lg:flex-row gap-6">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <Info label="Name" value={data.name} />
+            <Info label="ID Number" value={data.id_number} />
+            <Info label="Phone" value={data.phone} />
+            <Info label="Email" value={data.email || "-"} />
+            <Info label="Location" value={data.location || "-"} />
+            <Info
+              label="Joined"
+              value={new Date(data.created_at).toLocaleDateString()}
+            />
+          </div>
+          <div className="w-full lg:w-56 flex justify-center lg:justify-end">
+            <div className="w-40 h-40 rounded-full border bg-gray-50 overflow-hidden flex items-center justify-center">
+              <img
+                src={data.profile_image_url || AVATAR_PLACEHOLDER}
+                alt={`${data.name} avatar`}
+                className={`w-full h-full object-cover ${data.profile_image_url ? "" : "p-6 opacity-70"}`}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = AVATAR_PLACEHOLDER;
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -206,6 +222,16 @@ export default function CustomerDetailsPage() {
             );
           })()}
           <div className="font-semibold text-red-600">Unpaid: KSh {l.remaining_amount}</div>
+          {(() => {
+            const total = Number(l.total_amount ?? 0);
+            const remaining = Number(l.remaining_amount ?? 0);
+            const paid = Math.max(0, total - remaining);
+            return (
+              <div className="font-semibold text-emerald-600">
+                Paid So Far: KSh {paid.toFixed(2)}
+              </div>
+            );
+          })()}
           <div className="mt-2 text-sm text-gray-600">Interest Rate: {l.interest_rate}%</div>
           <div className="mt-1 text-xs text-gray-500">
             Start: {l.start_date} · Due: {l.due_date}

@@ -22,6 +22,11 @@ const config = {
     baseUrl: API_URL,
     timeout: 10000, // 10 seconds
   },
+
+  cloudinary: {
+    cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "",
+    uploadPreset: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "",
+  },
   
   // Feature flags
   features: {

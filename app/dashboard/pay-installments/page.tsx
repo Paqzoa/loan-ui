@@ -1,149 +1,396 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
+type ActiveLoan = {
+  id: number;
+  amount: number;
+  interest_rate: number;
+  remaining_amount: number;
+  start_date: string;
+  due_date: string;
+  status: string;
+  customer: {
+    name: string | null;
+    id_number: string;
+    phone: string | null;
+    location?: string | null;
+  };
+};
 
+type ActiveCustomer = {
+  id_number: string;
+  name: string;
+  phone?: string | null;
+  location?: string | null;
+  loans: ActiveLoan[];
+};
 
-function PayInstallmentForm() {
-  const router = useRouter();
-  const [idNumber, setIdNumber] = useState("");
-  const [amount, setAmount] = useState("");
+function normalizeStatus(value: string | undefined | null) {
+  return (value || "").toLowerCase();
+}
+
+function useActiveCustomers() {
+  const [customers, setCustomers] = useState<ActiveCustomer[]>([]);
   const [loading, setLoading] = useState(false);
-  const [customer, setCustomer] = useState<any | null>(null);
-  // Check if customer has active (not overdue/arrears/completed) loans
-  const hasPayableLoan = (cust: any | null) => {
-    if (!cust || !Array.isArray(cust.loans)) return false;
-    return cust.loans.some((l: any) => {
-      const status = (l.status || '').toLowerCase();
-      return status === 'active'; // Only ACTIVE loans can be paid here
-    });
-  };
 
-  // Check if customer has overdue loans
-  const hasOverdueLoan = (cust: any | null) => {
-    if (!cust || !Array.isArray(cust.loans)) return false;
-    return cust.loans.some((l: any) => {
-      const status = (l.status || '').toLowerCase();
-      return status === 'overdue' || status === 'arrears';
-    });
-  };
-
-  const lookup = async () => {
-    if (!idNumber) return;
+  const fetchActive = async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/customers/by-id-number/${encodeURIComponent(idNumber)}`);
-      const data = (res as any).data ?? res;
-      setCustomer(data);
-    } catch (e: any) {
-      setCustomer(null);
-      toast.error(e?.response?.data?.detail || 'Customer not found');
+      const res = await api.get("/loans/active");
+      const rows: ActiveLoan[] = ((res as any).data ?? res) || [];
+      const grouped = new Map<string, ActiveCustomer>();
+      rows.forEach((loan) => {
+        const key = loan.customer?.id_number;
+        if (!key) return;
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            id_number: key,
+            name: loan.customer?.name || "Unknown",
+            phone: loan.customer?.phone,
+            location: loan.customer?.location,
+            loans: [],
+          });
+        }
+        grouped.get(key)!.loans.push(loan);
+      });
+      setCustomers(Array.from(grouped.values()));
+    } catch (error: any) {
+      const detail = error?.message || error?.response?.data?.detail || "Failed to load active loans";
+      toast.error(detail);
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePay = async (loanId?: number) => {
-    if (!idNumber || !amount) return;
-    setLoading(true);
+  useEffect(() => {
+    fetchActive();
+  }, []);
+
+  return { customers, loading, refetch: fetchActive };
+}
+
+function CustomerDetail({
+  customer,
+  onPaymentRecorded,
+}: {
+  customer: any | null;
+  onPaymentRecorded: () => Promise<void>;
+}) {
+  const router = useRouter();
+  const [amount, setAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setAmount("");
+  }, [customer?.id_number]);
+
+  const hasPayableLoan = useMemo(() => {
+    if (!customer?.loans) return false;
+    return customer.loans.some((loan: any) => normalizeStatus(loan.status) === "active");
+  }, [customer]);
+
+  const hasOverdueLoan = useMemo(() => {
+    if (!customer?.loans) return false;
+    return customer.loans.some((loan: any) => {
+      const status = normalizeStatus(loan.status);
+      return status === "overdue" || status === "arrears";
+    });
+  }, [customer]);
+
+  const handlePay = async () => {
+    if (!customer?.id_number || !amount) return;
+    setSubmitting(true);
     try {
-      await api.post('/payments', { id_number: idNumber, amount: parseFloat(amount) });
-      toast.success('Payment recorded');
+      await api.post("/payments", {
+        id_number: customer.id_number,
+        amount: parseFloat(amount),
+      });
+      toast.success("Payment recorded");
       setAmount("");
-
-      router.push("/dashboard");
-     
-      await lookup();
-    } catch (e: any) {
-      const msg = e?.message || e?.response?.data?.detail || 'Failed to record payment';
-      toast.error(msg);
+      await onPaymentRecorded();
+      router.refresh();
+    } catch (error: any) {
+      const message = error?.message || error?.response?.data?.detail || "Failed to record payment";
+      toast.error(message);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
+
+  if (!customer) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500 text-sm">
+        Select a customer to view details
+      </div>
+    );
+    }
 
   return (
-    <div className="max-w-3xl">
-      <div className="flex flex-col md:flex-row gap-3">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700">Customer ID Number</label>
-          <input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} className="w-full px-3 py-2 border rounded mt-1" />
+    <div className="flex flex-col h-full">
+      <div className="p-4 border rounded-lg">
+        <div className="font-semibold">
+          {customer.name}{" "}
+          <span className="text-xs text-gray-500">({customer.id_number})</span>
         </div>
-        <button onClick={lookup} disabled={loading || !idNumber} className="px-4 py-2 bg-green-600 text-white rounded self-end">{loading ? 'Searching...' : 'Search'}</button>
+        <div className="text-sm text-gray-600">
+          {customer.phone || "No phone"}
+          {customer.location ? ` · ${customer.location}` : ""}
+        </div>
       </div>
-
-      {customer && (
-        <div className="mt-6">
-          <div className="p-4 border rounded-lg">
-            <div className="font-semibold">{customer.name} <span className="text-xs text-gray-500">({customer.id_number})</span></div>
-            <div className="text-sm text-gray-600">{customer.phone}{customer.email ? ` · ${customer.email}` : ''}</div>
-          </div>
-
-          <div className="mt-4 p-4 border rounded-lg">
-            <div className="font-semibold mb-2">Loans</div>
-            {(customer.loans || []).length === 0 ? (
-              <div className="text-sm text-gray-600">No loans found</div>
-            ) : (
-              <div className="space-y-3">
-                {(customer.loans || []).map((l: any) => {
-                  const status = (l.status || '').toLowerCase();
-                  const isOverdueOrArrears = status === 'overdue' || status === 'arrears';
-                  const weeklyProgress = l.weekly_progress || {};
-                  const weeklyDue = Number(weeklyProgress.weekly_due_amount ?? l.weekly_due_amount ?? 0);
-                  const weeksElapsed = Number(weeklyProgress.weeks_elapsed ?? weeklyProgress.weeksElapsed ?? 0);
-                  const arrearsAmount = Number(weeklyProgress.arrears_amount ?? l.weekly_arrears ?? 0);
-                  return (
-                    <div key={l.id} className={`p-3 border rounded ${isOverdueOrArrears ? 'bg-yellow-50 border-yellow-200' : ''}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium">KSh {l.amount}</div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          status === 'completed' ? 'bg-gray-100 text-gray-700' : 
-                          isOverdueOrArrears ? 'bg-yellow-100 text-yellow-700' : 
-                          'bg-green-50 text-green-700'
-                        }`}>{l.status}</span>
-                      </div>
-                      <div className="mt-1 text-xs text-gray-600">Interest: {l.interest_rate}% · Start: {l.start_date} · Due: {l.due_date}</div>
-                      <div className="mt-1 text-xs text-gray-600">Remaining Amount: KSh {l.remaining_amount}</div>
-                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
-                        <div>Weekly Allocation: KSh {weeklyDue.toFixed(2)}</div>
-                        <div>Weeks Elapsed: {weeksElapsed} / 4</div>
-                        <div className={`${arrearsAmount > 0 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
-                          Weekly Arrears: KSh {arrearsAmount.toFixed(2)}
-                        </div>
-                      </div>
-                      {isOverdueOrArrears && (
-                        <div className="mt-2 text-xs text-yellow-700 font-medium">
-                          ⚠️ This loan must be paid through the Overdue page
-                        </div>
-                      )}
+      <div className="mt-4 flex-1 overflow-y-auto">
+        <div className="p-4 border rounded-lg">
+          <div className="font-semibold mb-2">Loans</div>
+          {(customer.loans || []).length === 0 ? (
+            <div className="text-sm text-gray-600">No loans found</div>
+          ) : (
+            <div className="space-y-3">
+              {customer.loans.map((loan: any) => {
+                const status = normalizeStatus(loan.status);
+                const isOverdueOrArrears =
+                  status === "overdue" || status === "arrears";
+                const highlightClass = isOverdueOrArrears
+                  ? "bg-yellow-50 border-yellow-200"
+                  : status === "completed"
+                  ? "bg-gray-50 border-gray-200"
+                  : "bg-green-50 border-green-100";
+                return (
+                  <div
+                    key={loan.id}
+                    className={`p-3 border rounded ${highlightClass}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">KSh {loan.amount}</div>
+                      <span className="text-xs px-2 py-1 rounded-full bg-white border text-gray-700">
+                        {loan.status}
+                      </span>
                     </div>
-                  );
-                })}
+                    <div className="mt-1 text-xs text-gray-600">
+                      Start: {loan.start_date} · Due: {loan.due_date}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-600">
+                      Remaining Amount: KSh {loan.remaining_amount}
+                    </div>
+                    {isOverdueOrArrears && (
+                      <div className="mt-2 text-xs text-yellow-700 font-medium">
+                        ⚠️ This loan must be paid through the Overdue page
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {hasPayableLoan ? (
+            <div className="mt-4 max-w-sm">
+              <label className="block text-sm font-medium text-gray-700">
+                Installment Amount
+              </label>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full px-3 py-2 border rounded mt-1 mb-3"
+              />
+              <button
+                onClick={handlePay}
+                disabled={submitting || !amount}
+                className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-60"
+              >
+                {submitting ? "Recording..." : "Record Payment"}
+              </button>
+            </div>
+          ) : hasOverdueLoan ? (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="text-sm text-yellow-800 font-medium mb-1">
+                ⚠️ Overdue Loan Detected
               </div>
-            )}
-            {hasPayableLoan(customer) ? (
-              <div className="mt-4 max-w-sm">
-                <label className="block text-sm font-medium text-gray-700">Installment Amount</label>
-                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2 border rounded mt-1 mb-3" />
-                <button onClick={() => handlePay()} disabled={loading || !amount} className="px-4 py-2 bg-green-600 text-white rounded">Record Payment</button>
+              <div className="text-xs text-yellow-700">
+                Loans that are overdue must be paid through the{" "}
+                <span className="font-semibold">Overdue</span> page, not here.
               </div>
-            ) : hasOverdueLoan(customer) ? (
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="text-sm text-yellow-800 font-medium mb-1">⚠️ Overdue Loan Detected</div>
-                <div className="text-xs text-yellow-700">
-                  Loans that are overdue must be paid through the <span className="font-semibold">Overdue</span> page, not here.
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 text-sm text-gray-600">All loans are completed. No further installments can be recorded.</div>
-            )}
+            </div>
+          ) : (
+            <div className="mt-4 text-sm text-gray-600">
+              All loans are completed. No further installments can be recorded.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function PayInstallmentsWorkspace() {
+  const { customers, loading, refetch } = useActiveCustomers();
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const filteredCustomers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return customers;
+    return customers.filter((cust) => {
+      return (
+        cust.name.toLowerCase().includes(term) ||
+        cust.id_number.toLowerCase().includes(term) ||
+        (cust.phone || "").toLowerCase().includes(term)
+      );
+    });
+  }, [customers, search]);
+
+  const loadCustomerDetail = async (idNumber: string) => {
+    setDetailLoading(true);
+    try {
+      const res = await api.get(
+        `/customers/by-id-number/${encodeURIComponent(idNumber)}`
+      );
+      const data = (res as any).data ?? res;
+      setDetail(data);
+      setSelectedId(idNumber);
+    } catch (error: any) {
+      const message =
+        error?.message ||
+        error?.response?.data?.detail ||
+        "Failed to load customer details";
+      toast.error(message);
+      setDetail(null);
+      setSelectedId(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleSelectCustomer = async (idNumber: string) => {
+    await loadCustomerDetail(idNumber);
+  };
+
+  const handleBackToList = () => {
+    setDetail(null);
+    setSelectedId(null);
+  };
+
+  const handlePaymentRecorded = async () => {
+    await refetch();
+    if (selectedId) {
+      await loadCustomerDetail(selectedId);
+    }
+  };
+
+  const isDetailView = Boolean(detail || detailLoading);
+
+  if (isDetailView) {
+    return (
+      <div className="border rounded-lg p-4 space-y-4 w-full">
+        <div className="flex items-center justify-between">
+          <div>
+            <button
+              onClick={handleBackToList}
+              className="text-sm text-green-700 hover:text-green-900 font-semibold flex items-center gap-2"
+            >
+              ← Back to Active Borrowers
+            </button>
+            <h4 className="text-lg font-semibold mt-2">
+              {detail?.name || "Borrower"} Installment
+            </h4>
+            <p className="text-xs text-gray-500">
+              Record payments for the selected borrower
+            </p>
           </div>
         </div>
-      )}
+        {detailLoading ? (
+          <div className="py-12 text-center text-gray-500">
+            Loading customer details...
+          </div>
+        ) : (
+          <CustomerDetail
+            customer={detail}
+            onPaymentRecorded={handlePaymentRecorded}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-4 w-full">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h4 className="text-base font-semibold">Active Borrowers</h4>
+          <p className="text-xs text-gray-500">
+            Click a borrower to expand and capture a payment
+          </p>
+        </div>
+        {loading && <span className="text-xs text-gray-500">Refreshing...</span>}
+      </div>
+      <input
+        type="text"
+        placeholder="Search by name, ID or phone"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full px-3 py-2 border rounded"
+      />
+      <div className="space-y-3">
+        {filteredCustomers.length === 0 ? (
+          <div className="text-sm text-gray-500 text-center py-10">
+            {loading
+              ? "Loading customers..."
+              : "No active loans found. When loans are issued they will appear here."}
+          </div>
+        ) : (
+          filteredCustomers.map((cust) => {
+            const matches =
+              search.trim().length > 0 &&
+              (cust.name.toLowerCase().includes(search.toLowerCase()) ||
+                cust.id_number.toLowerCase().includes(search.toLowerCase()) ||
+                (cust.phone || "").toLowerCase().includes(search.toLowerCase()));
+            return (
+              <div
+                key={cust.id_number}
+                className={`border rounded-lg border-gray-200 bg-white ${
+                  matches ? "ring-2 ring-green-200" : ""
+                }`}
+              >
+                <button
+                  onClick={() => handleSelectCustomer(cust.id_number)}
+                  className="w-full p-4 flex items-center justify-between text-left"
+                >
+                  <div>
+                    <div className="font-semibold text-gray-900">{cust.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {cust.id_number}
+                      {cust.phone ? ` · ${cust.phone}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span>
+                      {cust.loans.length} loan{cust.loans.length > 1 ? "s" : ""}
+                    </span>
+                    <svg
+                      className="w-4 h-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.939l3.71-3.71a.75.75 0 011.08 1.04l-4.24 4.25a.75.75 0 01-1.08 0l-4.25-4.25a.75.75 0 01.02-1.06z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -152,14 +399,12 @@ export default function PayInstallmentsPage() {
   const { loading: authLoading, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  // Auth guard: redirect to login if session expired
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push("/login");
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Show loading while checking auth
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -168,16 +413,15 @@ export default function PayInstallmentsPage() {
     );
   }
 
-  // Don't render if not authenticated (will redirect)
   if (!isAuthenticated) {
     return null;
   }
 
   return (
-    <section>
+    <section className="w-full">
       <h3 className="text-lg font-semibold mb-4">Pay Installment</h3>
-      <div className="bg-white p-6 rounded shadow-sm">
-        <PayInstallmentForm />
+      <div className="bg-white p-4 sm:p-6 rounded shadow-sm w-full">
+        <PayInstallmentsWorkspace />
       </div>
     </section>
   );

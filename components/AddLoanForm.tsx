@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import config from "@/lib/config";
+import { uploadCustomerImage } from "@/lib/cloudinary";
 import toast from "react-hot-toast";
 
 interface Customer {
@@ -12,6 +13,7 @@ interface Customer {
   id_number: string;
   phone: string;
   location?: string;
+  profile_image_url?: string | null;
 }
 
 interface CustomerCheckResponse {
@@ -40,6 +42,7 @@ export default function AddLoanForm() {
     id_number: "",
     phone: "",
     location: "",
+    profile_image_url: "",
   });
 
   const [loanForm, setLoanForm] = useState({
@@ -61,6 +64,10 @@ export default function AddLoanForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingLoans, setExistingLoans] = useState<any[]>([]);
   const [existingOverdue, setExistingOverdue] = useState<any[]>([]);
+  const [customerPhotoUrl, setCustomerPhotoUrl] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -80,11 +87,14 @@ export default function AddLoanForm() {
       setHasOverdueLoans(!!data.has_overdue_loans);
       if (data.exists && data.customer) {
         setCustomerExists(true);
+        setSelectedCustomerId(data.customer.id);
+        setCustomerPhotoUrl(data.customer.profile_image_url || null);
         setCustomerForm({
           name: data.customer.name,
           id_number: data.customer.id_number,
           phone: data.customer.phone,
           location: (data.customer as any).location || "",
+          profile_image_url: data.customer.profile_image_url || "",
         });
         toast.success("Customer found and loaded");
         // Load detailed loans/arrears for conditional UI display
@@ -109,10 +119,16 @@ export default function AddLoanForm() {
           } else {
             setExistingOverdue([]);
           }
+          if (d.profile_image_url) {
+            setCustomerPhotoUrl(d.profile_image_url);
+            setCustomerForm((prev) => ({ ...prev, profile_image_url: d.profile_image_url }));
+          }
         } catch (_) {}
       } else {
         setCustomerExists(false);
-        setCustomerForm({ name: "", id_number: "", phone: "", location: "" });
+        setSelectedCustomerId(null);
+        setCustomerPhotoUrl(null);
+        setCustomerForm({ name: "", id_number: "", phone: "", location: "", profile_image_url: "" });
         toast("Customer not found. Please add new customer details.");
         setExistingLoans([]);
         setExistingOverdue([]);
@@ -142,6 +158,41 @@ export default function AddLoanForm() {
     setGuarantorForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handlePhotoButtonClick = () => {
+    photoInputRef.current?.click();
+  };
+
+  const handlePhotoSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingPhoto(true);
+      const uploadedUrl = await uploadCustomerImage(file);
+      setCustomerPhotoUrl(uploadedUrl);
+      setCustomerForm((prev) => ({ ...prev, profile_image_url: uploadedUrl }));
+
+      if (customerExists && selectedCustomerId) {
+        await api.patch(`/customers/${selectedCustomerId}/photo`, {
+          profile_image_url: uploadedUrl,
+        });
+        toast.success("Customer photo updated");
+      } else {
+        toast.success("Photo attached. Save the customer to persist it.");
+      }
+    } catch (error: any) {
+      const message = error?.message || "Failed to upload image";
+      toast.error(message);
+    } finally {
+      setIsUploadingPhoto(false);
+      if (event.target) {
+        event.target.value = "";
+      }
+    }
+  };
+
+  const photoPreviewSrc = customerPhotoUrl || "/avatar-placeholder.svg";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (hasActiveLoan || hasOverdueLoans) {
@@ -156,7 +207,9 @@ export default function AddLoanForm() {
           setIsSubmitting(false);
           return;
         }
-        await api.post<{ id: number }>("/customers", customerForm);
+        const createdCustomer = await api.post<(Customer & { id: number })>("/customers", customerForm);
+        setCustomerExists(true);
+        setSelectedCustomerId(createdCustomer.id);
       }
       const loanData: any = {
         id_number: customerForm.id_number,
@@ -193,6 +246,13 @@ export default function AddLoanForm() {
 
   return (
     <div className="container mx-auto px-4 py-4">
+      <input
+        type="file"
+        accept="image/*"
+        ref={photoInputRef}
+        className="hidden"
+        onChange={handlePhotoSelected}
+      />
       <h1 className="text-2xl font-bold mb-6">Add New Loan</h1>
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Customer Lookup</h2>
@@ -220,22 +280,48 @@ export default function AddLoanForm() {
                 </ul>
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" id="name" name="name" value={customerForm.name} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter full name" required readOnly={customerExists} />
+            <div className="mt-4 flex flex-col lg:flex-row gap-6">
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                  <input type="text" id="name" name="name" value={customerForm.name} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter full name" required readOnly={customerExists} />
+                </div>
+                <div>
+                  <label htmlFor="id_number" className="block text-sm font-medium text-gray-700 mb-1">ID Number</label>
+                  <input type="text" id="id_number" name="id_number" value={customerForm.id_number} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter ID number" required readOnly={customerExists} />
+                </div>
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                  <input type="tel" id="phone" name="phone" value={customerForm.phone} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter phone number" required readOnly={customerExists} />
+                </div>
+                <div>
+                  <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <input type="text" id="location" name="location" value={customerForm.location} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter location" required readOnly={customerExists} />
+                </div>
               </div>
-              <div>
-                <label htmlFor="id_number" className="block text-sm font-medium text-gray-700 mb-1">ID Number</label>
-                <input type="text" id="id_number" name="id_number" value={customerForm.id_number} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter ID number" required readOnly={customerExists} />
-              </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                <input type="tel" id="phone" name="phone" value={customerForm.phone} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter phone number" required readOnly={customerExists} />
-              </div>
-              <div>
-                <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                <input type="text" id="location" name="location" value={customerForm.location} onChange={handleCustomerChange} className="w-full px-4 py-2 border border-gray-300 rounded-md text-black focus:ring-green-500 focus:border-green-500" placeholder="Enter location" required readOnly={customerExists} />
+              <div className="w-full lg:w-64">
+                <div className="border rounded-lg p-4 bg-gray-50 flex flex-col items-center text-center gap-3">
+                  <div className="w-32 h-32 rounded-full overflow-hidden border bg-white flex items-center justify-center">
+                    <img
+                      src={photoPreviewSrc}
+                      alt="Customer avatar"
+                      className={`w-full h-full object-cover ${customerPhotoUrl ? "" : "p-6 opacity-70"}`}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "/avatar-placeholder.svg";
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePhotoButtonClick}
+                    disabled={isUploadingPhoto}
+                    className="px-4 py-2 text-sm rounded-md border border-green-600 text-green-700 hover:bg-green-50 disabled:opacity-50"
+                  >
+                    {isUploadingPhoto ? "Uploading..." : customerPhotoUrl ? "Change Photo" : "Add Photo"}
+                  </button>
+                  <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 5MB. Stored securely on Cloudinary.</p>
+                </div>
               </div>
             </div>
           </div>
