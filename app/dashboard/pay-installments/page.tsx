@@ -104,11 +104,24 @@ function CustomerDetail({
 
   const handlePay = async () => {
     if (!customer?.id_number || !amount) return;
+
+    const activeLoan = customer.loans?.find(
+      (loan: any) => normalizeStatus(loan.status) === "active"
+    );
+    const remaining = Number(activeLoan?.remaining_amount ?? 0);
+    const numericAmount = parseFloat(amount);
+    if (remaining > 0 && numericAmount > remaining) {
+      toast.error(
+        `Installment cannot exceed remaining balance. Remaining: KSh ${remaining}`
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       await api.post("/payments", {
         id_number: customer.id_number,
-        amount: parseFloat(amount),
+        amount: numericAmount,
       });
       toast.success("Payment recorded");
       setAmount("");

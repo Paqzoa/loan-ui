@@ -48,18 +48,20 @@ export default function CustomerDetailsPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
+  const fetchCustomer = async () => {
+    if (!customerId) return;
+    try {
+      const res = await api.get(`/customers/${customerId}`);
+      setData((res as any).data ?? res);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      if (!authLoading && isAuthenticated && customerId) {
-        try {
-          const res = await api.get(`/customers/${customerId}`);
-          setData((res as any).data ?? res);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-    load();
+    if (!authLoading && isAuthenticated && customerId) {
+      fetchCustomer();
+    }
   }, [authLoading, isAuthenticated, customerId]);
 
   // Generate PDF Report
@@ -90,6 +92,12 @@ export default function CustomerDetailsPage() {
   };
 
   const handleEditInstallment = (inst: any) => {
+    const loan = loans.find((l: any) => l.id === inst.loan_id);
+    const status = String(loan?.status || "").toUpperCase();
+    if (status !== "ACTIVE") {
+      alert("Only installments for ACTIVE loans can be edited.");
+      return;
+    }
     setEditingInstallmentId(inst.id);
     setInstallmentAmounts((prev) => ({
       ...prev,
@@ -106,18 +114,28 @@ export default function CustomerDetailsPage() {
     }
     try {
       await api.put(`/payments/installments/${inst.id}`, { amount: amt });
-      // Optimistically update local state
-      setData((prev: any) => {
-        if (!prev) return prev;
-        const updated = { ...prev };
-        updated.installments = (updated.installments || []).map((i: any) =>
-          i.id === inst.id ? { ...i, amount: amt } : i
-        );
-        return updated;
-      });
+      await fetchCustomer();
       setEditingInstallmentId(null);
     } catch (e: any) {
       alert(e?.response?.data?.detail || e?.message || "Failed to update installment");
+    }
+  };
+
+  const handleDeleteInstallment = async (inst: any) => {
+    const loan = loans.find((l: any) => l.id === inst.loan_id);
+    const status = String(loan?.status || "").toUpperCase();
+    if (status !== "ACTIVE") {
+      alert("Only installments for ACTIVE loans can be deleted.");
+      return;
+    }
+    if (!window.confirm("Are you sure you want to delete this installment? This will adjust the loan balance.")) {
+      return;
+    }
+    try {
+      await api.delete(`/payments/installments/${inst.id}`);
+      await fetchCustomer();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || e?.message || "Failed to delete installment");
     }
   };
 
@@ -282,48 +300,72 @@ export default function CustomerDetailsPage() {
           <div className="mt-3 text-sm text-gray-600">No installments yet</div>
         ) : (
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {(data.installments || []).map((i: any) => (
-              <div key={i.id} className="p-4 border rounded-lg hover:shadow">
-                <div className="flex items-center justify-between gap-2">
-                  {editingInstallmentId === i.id ? (
-                    <>
-                      <input
-                        type="number"
-                        value={installmentAmounts[i.id] ?? ""}
-                        onChange={(e) =>
-                          setInstallmentAmounts((prev) => ({ ...prev, [i.id]: e.target.value }))
-                        }
-                        className="px-2 py-1 border rounded text-sm w-28"
-                      />
-                      <button
-                        onClick={() => handleSaveInstallment(i)}
-                        className="text-xs px-2 py-1 rounded bg-green-600 text-white"
-                      >
-                        Save
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="font-semibold text-gray-900">
-                        Paid: KSh {i.amount}
+            {(data.installments || []).map((i: any) => {
+              const loan = loans.find((l: any) => l.id === i.loan_id);
+              const status = String(loan?.status || "").toUpperCase();
+              const canModify = status === "ACTIVE";
+              return (
+                <div key={i.id} className="p-4 border rounded-lg hover:shadow">
+                  <div className="flex items-center justify-between gap-2">
+                    {editingInstallmentId === i.id ? (
+                      <>
+                        <input
+                          type="number"
+                          value={installmentAmounts[i.id] ?? ""}
+                          onChange={(e) =>
+                            setInstallmentAmounts((prev) => ({
+                              ...prev,
+                              [i.id]: e.target.value,
+                            }))
+                          }
+                          className="px-2 py-1 border rounded text-sm w-28"
+                        />
+                        <button
+                          onClick={() => handleSaveInstallment(i)}
+                          className="text-xs px-2 py-1 rounded bg-green-600 text-white"
+                        >
+                          Save
+                        </button>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between w-full gap-3">
+                        <div className="font-semibold text-gray-900">
+                          Paid: KSh {i.amount}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {canModify ? (
+                            <>
+                              <button
+                                onClick={() => handleEditInstallment(i)}
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteInstallment(i)}
+                                className="text-xs text-red-600 hover:underline"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 italic">
+                              Linked to completed/overdue loan
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleEditInstallment(i)}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </>
-                  )}
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    Date: {i.payment_date}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-400">
+                    Associated with Loan ID: {i.loan_id}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
-                  Date: {i.payment_date}
-                </div>
-                <div className="mt-1 text-xs text-gray-400">
-                  Associated with Loan ID: {i.loan_id}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
