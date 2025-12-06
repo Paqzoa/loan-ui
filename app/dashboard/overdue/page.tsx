@@ -155,6 +155,9 @@ function OverdueManager() {
                   <div>
                     <div className="text-xs uppercase tracking-wide text-gray-400">Overdue #{a.id}</div>
                     <div className="text-xl font-semibold text-gray-900 mt-1">KSh {a.remaining_amount}</div>
+                    {a.customer_name && (
+                      <div className="text-sm font-medium text-gray-700 mt-1">Customer: {a.customer_name}</div>
+                    )}
                     <div className="text-xs text-gray-500 mt-1">Customer ID: {a.customer_id}</div>
                     <div className="text-xs text-gray-500">Loan ID: {a.loan_id}</div>
                     <div className="text-xs text-gray-400 mt-2">Overdue since {a.arrears_date}</div>
@@ -173,11 +176,18 @@ function OverdueManager() {
                     <label className="text-xs font-medium text-gray-600">Amount to apply</label>
                     <div className="flex flex-col sm:flex-row gap-3 w-full">
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="Enter amount"
                         value={amounts[a.id] || ""}
-                        onChange={(e) => setAmounts((s) => ({ ...s, [a.id]: e.target.value }))}
-                        className="w-full sm:flex-[2] px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Only allow numbers and decimal point
+                          if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                            setAmounts((s) => ({ ...s, [a.id]: value }));
+                          }
+                        }}
+                        className="w-full sm:flex-[2] px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <div className="flex flex-col sm:flex-row gap-3 w-full sm:flex-[3]">
                         <button

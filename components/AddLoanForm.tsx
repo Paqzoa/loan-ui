@@ -68,6 +68,7 @@ export default function AddLoanForm() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [useCamera, setUseCamera] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -158,13 +159,20 @@ export default function AddLoanForm() {
     setGuarantorForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handlePhotoButtonClick = () => {
-    photoInputRef.current?.click();
+  const handlePhotoButtonClick = (camera: boolean) => {
+    setUseCamera(camera);
+    // Small delay to ensure state is set before clicking
+    setTimeout(() => {
+      photoInputRef.current?.click();
+    }, 0);
   };
 
   const handlePhotoSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setUseCamera(null);
+      return;
+    }
 
     try {
       setIsUploadingPhoto(true);
@@ -185,6 +193,7 @@ export default function AddLoanForm() {
       toast.error(message);
     } finally {
       setIsUploadingPhoto(false);
+      setUseCamera(null);
       if (event.target) {
         event.target.value = "";
       }
@@ -252,6 +261,7 @@ export default function AddLoanForm() {
         ref={photoInputRef}
         className="hidden"
         onChange={handlePhotoSelected}
+        capture={useCamera === true ? "environment" : undefined}
       />
       <h1 className="text-2xl font-bold mb-6">Add New Loan</h1>
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -312,14 +322,31 @@ export default function AddLoanForm() {
                       }}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={handlePhotoButtonClick}
-                    disabled={isUploadingPhoto}
-                    className="px-4 py-2 text-sm rounded-md border border-green-600 text-green-700 hover:bg-green-50 disabled:opacity-50"
-                  >
-                    {isUploadingPhoto ? "Uploading..." : customerPhotoUrl ? "Change Photo" : "Add Photo"}
-                  </button>
+                  <div className="flex flex-col gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => handlePhotoButtonClick(true)}
+                      disabled={isUploadingPhoto}
+                      className="px-4 py-2 text-sm rounded-md border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {isUploadingPhoto ? "Uploading..." : "Take Photo"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePhotoButtonClick(false)}
+                      disabled={isUploadingPhoto}
+                      className="px-4 py-2 text-sm rounded-md border border-green-600 text-green-700 hover:bg-green-50 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      {isUploadingPhoto ? "Uploading..." : customerPhotoUrl ? "Change Photo" : "Choose File"}
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 5MB. Stored securely on Cloudinary.</p>
                 </div>
               </div>
