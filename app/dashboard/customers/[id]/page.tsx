@@ -140,27 +140,6 @@ export default function CustomerDetailsPage() {
     }
   };
 
-  const handleDeleteCustomer = async () => {
-    if (!data) return;
-    
-    const confirmed = window.confirm(
-      `Are you sure you want to delete customer "${data.name}" (ID: ${data.id_number})?\n\n` +
-      "This will permanently delete the customer and all their details. " +
-      "This action cannot be undone."
-    );
-    
-    if (!confirmed) return;
-    
-    try {
-      await api.delete(`/customers/${customerId}`);
-      toast.success("Customer deleted successfully");
-      router.push("/dashboard/customers");
-    } catch (e: any) {
-      const errorMessage = e?.response?.data?.detail || e?.message || "Failed to delete customer";
-      toast.error(errorMessage);
-    }
-  };
-
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -202,12 +181,6 @@ export default function CustomerDetailsPage() {
       <div className="bg-white p-6 rounded shadow-sm">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Customer Details</h3>
-          <button
-            onClick={handleDeleteCustomer}
-            className="bg-red-600 text-white px-4 py-2 text-sm rounded-md hover:bg-red-700 transition-colors"
-          >
-            Delete Customer
-          </button>
         </div>
         <div className="mt-4 flex flex-col lg:flex-row gap-6">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">

@@ -113,53 +113,72 @@ function ManageCustomers() {
         <div className="text-sm text-gray-600">No customers found</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((c) => (
-            <a
-              key={c.id}
-              href={`/dashboard/customers/${c.id}`}
-              className="group relative block rounded-lg border bg-white p-4 shadow-sm hover:shadow-md transition"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full border bg-gray-100 overflow-hidden">
-                    <img
-                      src={c.profile_image_url || FALLBACK_AVATAR}
-                      alt={`${c.name || "Customer"} avatar`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = FALLBACK_AVATAR;
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <div className="text-base font-semibold text-gray-900">
-                      {highlightMatch(c.name || "", query)}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {highlightMatch(c.id_number?.toString() || "", query)}
-                    </div>
-                  </div>
-                </div>
-                <span className="text-xs rounded-full px-2 py-1 bg-green-50 text-green-700">
-                  Customer
-                </span>
-              </div>
-              <div className="mt-3 text-sm text-gray-600">
-                {highlightMatch(c.phone || "", query)}
-                {c.email ? <> · {highlightMatch(c.email, query)}</> : ""}
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                {highlightMatch(c.location || "—", query)}
-              </div>
+          {filtered.map((c) => {
+            const hasActiveLoan =
+              typeof c.has_active_loan === "boolean"
+                ? c.has_active_loan
+                : Array.isArray(c.loans)
+                ? c.loans.some(
+                    (l: any) => String(l.status || "").toUpperCase() === "ACTIVE"
+                  )
+                : false;
 
-              <div className="pointer-events-none absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="rounded bg-gray-900 text-white text-xs px-2 py-1 shadow">
-                  Joined: {new Date(c.created_at).toLocaleDateString()}
+            const statusLabel = hasActiveLoan ? "Active loan" : "No active loan";
+            const badgeClasses = hasActiveLoan
+              ? "bg-red-100 text-red-700"
+              : "bg-emerald-100 text-emerald-700";
+            const cardClasses = hasActiveLoan
+              ? "border-red-200 bg-red-50"
+              : "border-emerald-200 bg-green-50";
+
+            return (
+              <a
+                key={c.id}
+                href={`/dashboard/customers/${c.id}`}
+                className={`group relative block rounded-lg border p-4 shadow-sm hover:shadow-md transition ${cardClasses}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full border bg-gray-100 overflow-hidden">
+                      <img
+                        src={c.profile_image_url || FALLBACK_AVATAR}
+                        alt={`${c.name || "Customer"} avatar`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = FALLBACK_AVATAR;
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-base font-semibold text-gray-900">
+                        {highlightMatch(c.name || "", query)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {highlightMatch(c.id_number?.toString() || "", query)}
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`text-xs rounded-full px-2 py-1 ${badgeClasses}`}>
+                    {statusLabel}
+                  </span>
                 </div>
-              </div>
-            </a>
-          ))}
+                <div className="mt-3 text-sm text-gray-600">
+                  {highlightMatch(c.phone || "", query)}
+                  {c.email ? <> · {highlightMatch(c.email, query)}</> : ""}
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  {highlightMatch(c.location || "—", query)}
+                </div>
+
+                <div className="pointer-events-none absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="rounded bg-gray-900 text-white text-xs px-2 py-1 shadow">
+                    Joined: {new Date(c.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+              </a>
+            );
+          })}
         </div>
       )}
     </div>

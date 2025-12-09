@@ -39,6 +39,7 @@ export default function DashboardOverviewPage() {
   const [chartData, setChartData] = useState<TrendData[]>([]);
   const [summary, setSummary] = useState<SummaryMetrics | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   // Auth guard: redirect to login if session expired
   useEffect(() => {
@@ -74,6 +75,26 @@ export default function DashboardOverviewPage() {
       setSummary(((summaryRes as any).data ?? summaryRes) as SummaryMetrics);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDownloadPaymentsReport() {
+    try {
+      const response = await api.get<Response>(`/dashboard/payments-report?date_str=${selectedDate}`, {
+        rawResponse: true,
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `payments_${selectedDate}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download payments report");
     }
   }
 
@@ -132,6 +153,28 @@ export default function DashboardOverviewPage() {
               <StatCard label="Active Loans (Started This Month)" value={summary.active_loans_count_this_month} color="text-blue-700" accent="bg-blue-50" />
               <StatCard label="Interest (Completed, Last 3 Months)" prefix="KSh " value={summary.interest_last_three_months} color="text-indigo-700" accent="bg-indigo-50" />
               <StatCard label="Overdue (Last 3 Months)" value={overdueSummaryCount} color="text-rose-700" accent="bg-rose-50" />
+              <div className="p-4 rounded-lg border shadow-sm bg-slate-50 md:col-span-2">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-sm text-gray-600">Payments report</div>
+                    <div className="text-base font-semibold text-gray-900">Download payments for a specific day</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="px-3 py-2 border rounded text-sm"
+                    />
+                    <button
+                      onClick={handleDownloadPaymentsReport}
+                      className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 transition"
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
