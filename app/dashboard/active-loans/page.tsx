@@ -20,6 +20,10 @@ export default function ActiveLoansPage() {
 	const [loans, setLoans] = useState<LoanItem[]>([]);
 	const [q, setQ] = useState("");
 	const [loading, setLoading] = useState(false);
+	const [editingId, setEditingId] = useState<number | null>(null);
+	const [editAmount, setEditAmount] = useState<string>("");
+	const [editRate, setEditRate] = useState<string>("");
+	const [saving, setSaving] = useState(false);
 
 	const load = async () => {
 		setLoading(true);
@@ -35,6 +39,40 @@ export default function ActiveLoansPage() {
 		load();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	const startEdit = (loan: LoanItem) => {
+		setEditingId(loan.id);
+		setEditAmount(String(loan.amount ?? ""));
+		setEditRate(String(loan.interest_rate ?? ""));
+	};
+
+	const cancelEdit = () => {
+		setEditingId(null);
+		setEditAmount("");
+		setEditRate("");
+	};
+
+	const saveEdit = async (loan: LoanItem) => {
+		const amount = parseFloat(editAmount);
+		const rate = editRate.trim() === "" ? null : parseFloat(editRate);
+		if (!amount || amount <= 0) {
+			alert("Enter a valid amount");
+			return;
+		}
+		setSaving(true);
+		try {
+			await api.patch(`/loans/${loan.id}`, {
+				amount,
+				interest_rate: rate ?? undefined,
+			});
+			await load();
+			cancelEdit();
+		} catch (e: any) {
+			alert(e?.response?.data?.detail || e?.message || "Failed to update loan");
+		} finally {
+			setSaving(false);
+		}
+	};
 
 	const placeholders = Array.from({ length: 6 }, () => ({} as any));
 
@@ -70,13 +108,57 @@ export default function ActiveLoansPage() {
 							{l?.guarantor && (<div>Guarantor: {l.guarantor.name} ({l.guarantor.relationship || "-"})</div>)}
 							<div className="text-xs text-gray-500 mt-1">Start {l?.start_date ?? "…"} · Due {l?.due_date ?? "…"}</div>
 						</div>
-						<div className="mt-3 flex justify-end">
-							{l?.id ? (
-								<Link href={`/dashboard/loans/${l.id}`} className="px-3 py-2 text-sm bg-gray-900 text-white rounded-md">View Details</Link>
-							) : (
-								<span className="px-3 py-2 text-sm bg-gray-200 text-gray-500 rounded-md">Loading…</span>
-							)}
-						</div>
+						{editingId === l?.id ? (
+							<div className="mt-3 space-y-2">
+								<div className="flex flex-col gap-2">
+									<label className="text-xs text-gray-600">New principal amount</label>
+									<input
+										type="number"
+										value={editAmount}
+										onChange={(e) => setEditAmount(e.target.value)}
+										className="px-3 py-2 border rounded text-sm"
+									/>
+								</div>
+								<div className="flex flex-col gap-2">
+									<label className="text-xs text-gray-600">Interest rate (%)</label>
+									<input
+										type="number"
+										value={editRate}
+										onChange={(e) => setEditRate(e.target.value)}
+										className="px-3 py-2 border rounded text-sm"
+									/>
+								</div>
+								<div className="flex justify-end gap-2">
+									<button onClick={cancelEdit} className="px-3 py-2 text-sm border rounded-md">Cancel</button>
+									<button
+										onClick={() => saveEdit(l)}
+										disabled={saving}
+										className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md disabled:opacity-60"
+									>
+										{saving ? "Saving..." : "Save"}
+									</button>
+								</div>
+								<div className="text-[11px] text-gray-500">
+									Already-paid installments stay accounted for; remaining is recalculated from the new total.
+								</div>
+							</div>
+						) : (
+							<div className="mt-3 flex justify-end gap-2">
+								{l?.id ? (
+									<>
+										<button
+											onClick={() => startEdit(l)}
+											className="px-3 py-2 text-sm border rounded-md"
+										>
+											Edit
+										</button>
+										<Link href={`/dashboard/loans/${l.id}`} className="px-3 py-2 text-sm bg-gray-900 text-white rounded-md">View Details</Link>
+									</>
+								) : (
+									<span className="px-3 py-2 text-sm bg-gray-200 text-gray-500 rounded-md">Loading…</span>
+								)}
+							</div>
+						)}
 					</div>
 				))}
 			</div>
