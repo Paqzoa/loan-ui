@@ -23,6 +23,13 @@ export default function ActiveLoansPage() {
 	const [editingId, setEditingId] = useState<number | null>(null);
 	const [editAmount, setEditAmount] = useState<string>("");
 	const [editRate, setEditRate] = useState<string>("");
+	const [editStartDate, setEditStartDate] = useState<string>("");
+	const [editDueDate, setEditDueDate] = useState<string>("");
+	const [editGuarantorName, setEditGuarantorName] = useState<string>("");
+	const [editGuarantorId, setEditGuarantorId] = useState<string>("");
+	const [editGuarantorPhone, setEditGuarantorPhone] = useState<string>("");
+	const [editGuarantorLocation, setEditGuarantorLocation] = useState<string>("");
+	const [editGuarantorRelationship, setEditGuarantorRelationship] = useState<string>("");
 	const [saving, setSaving] = useState(false);
 
 	const load = async () => {
@@ -44,30 +51,109 @@ export default function ActiveLoansPage() {
 		setEditingId(loan.id);
 		setEditAmount(String(loan.amount ?? ""));
 		setEditRate(String(loan.interest_rate ?? ""));
+		// Initialize dates - handle both date string formats
+		const startDate = loan.start_date ? (loan.start_date.includes('T') ? loan.start_date.split('T')[0] : loan.start_date) : "";
+		const dueDate = loan.due_date ? (loan.due_date.includes('T') ? loan.due_date.split('T')[0] : loan.due_date) : "";
+		setEditStartDate(startDate);
+		setEditDueDate(dueDate);
+		// Initialize guarantor fields if exists
+		if (loan.guarantor) {
+			setEditGuarantorName(loan.guarantor.name ?? "");
+			setEditGuarantorId(loan.guarantor.id_number ?? "");
+			setEditGuarantorPhone(loan.guarantor.phone ?? "");
+			setEditGuarantorLocation(loan.guarantor.location ?? "");
+			setEditGuarantorRelationship(loan.guarantor.relationship ?? "");
+		} else {
+			setEditGuarantorName("");
+			setEditGuarantorId("");
+			setEditGuarantorPhone("");
+			setEditGuarantorLocation("");
+			setEditGuarantorRelationship("");
+		}
 	};
 
 	const cancelEdit = () => {
 		setEditingId(null);
 		setEditAmount("");
 		setEditRate("");
+		setEditStartDate("");
+		setEditDueDate("");
+		setEditGuarantorName("");
+		setEditGuarantorId("");
+		setEditGuarantorPhone("");
+		setEditGuarantorLocation("");
+		setEditGuarantorRelationship("");
 	};
 
 	const saveEdit = async (loan: LoanItem) => {
-		const amount = parseFloat(editAmount);
-		const rate = editRate.trim() === "" ? null : parseFloat(editRate);
-		if (!amount || amount <= 0) {
-			alert("Enter a valid amount");
-			return;
-		}
 		setSaving(true);
 		try {
-			await api.patch(`/loans/${loan.id}`, {
-				amount,
-				interest_rate: rate ?? undefined,
-			});
+			// Build loan update payload
+			const loanPayload: any = {};
+			
+			if (editAmount.trim()) {
+				const amount = parseFloat(editAmount);
+				if (!amount || amount <= 0) {
+					alert("Enter a valid amount");
+					setSaving(false);
+					return;
+				}
+				loanPayload.amount = amount;
+			}
+			
+			if (editRate.trim()) {
+				const rate = parseFloat(editRate);
+				if (rate < 0) {
+					alert("Interest rate cannot be negative");
+					setSaving(false);
+					return;
+				}
+				loanPayload.interest_rate = rate;
+			}
+			
+			if (editStartDate) {
+				loanPayload.start_date = editStartDate;
+			}
+			
+			if (editDueDate) {
+				loanPayload.due_date = editDueDate;
+			}
+
+			// Update loan if there are changes
+			if (Object.keys(loanPayload).length > 0) {
+				await api.patch(`/loans/${loan.id}`, loanPayload);
+			}
+
+			// Update guarantor details if loan has a guarantor and fields were changed
+			if (loan.guarantor) {
+				const guarantorPayload: any = {};
+				
+				if (editGuarantorName.trim()) {
+					guarantorPayload.name = editGuarantorName.trim();
+				}
+				if (editGuarantorId.trim()) {
+					guarantorPayload.id_number = editGuarantorId.trim();
+				}
+				if (editGuarantorPhone.trim()) {
+					guarantorPayload.phone = editGuarantorPhone.trim();
+				}
+				if (editGuarantorLocation.trim()) {
+					guarantorPayload.location = editGuarantorLocation.trim();
+				}
+				if (editGuarantorRelationship.trim()) {
+					guarantorPayload.relationship = editGuarantorRelationship.trim();
+				}
+
+				// Only send guarantor update if there are changes
+				if (Object.keys(guarantorPayload).length > 0) {
+					await api.patch(`/loans/${loan.id}/guarantor/${loan.guarantor.id}`, guarantorPayload);
+				}
+			}
+
 			await load();
 			cancelEdit();
 		} catch (e: any) {
+			console.error("Update error:", e);
 			alert(e?.response?.data?.detail || e?.message || "Failed to update loan");
 		} finally {
 			setSaving(false);
@@ -109,37 +195,121 @@ export default function ActiveLoansPage() {
 							<div className="text-xs text-gray-500 mt-1">Start {l?.start_date ?? "…"} · Due {l?.due_date ?? "…"}</div>
 						</div>
 						{editingId === l?.id ? (
-							<div className="mt-3 space-y-2">
-								<div className="flex flex-col gap-2">
-									<label className="text-xs text-gray-600">New principal amount</label>
-									<input
-										type="number"
-										value={editAmount}
-										onChange={(e) => setEditAmount(e.target.value)}
-										className="px-3 py-2 border rounded text-sm"
-									/>
+							<div className="mt-3 space-y-3 border-t pt-3">
+								<div className="text-xs font-semibold text-gray-700 mb-2">Loan Details</div>
+								<div className="grid grid-cols-2 gap-2">
+									<div className="flex flex-col gap-1">
+										<label className="text-xs text-gray-600">Principal Amount</label>
+										<input
+											type="number"
+											step="0.01"
+											value={editAmount}
+											onChange={(e) => setEditAmount(e.target.value)}
+											className="px-2 py-1.5 border rounded text-sm"
+											placeholder="Amount"
+										/>
+									</div>
+									<div className="flex flex-col gap-1">
+										<label className="text-xs text-gray-600">Interest Rate (%)</label>
+										<input
+											type="number"
+											step="0.1"
+											value={editRate}
+											onChange={(e) => setEditRate(e.target.value)}
+											className="px-2 py-1.5 border rounded text-sm"
+											placeholder="Rate"
+										/>
+									</div>
+									<div className="flex flex-col gap-1">
+										<label className="text-xs text-gray-600">Start Date</label>
+										<input
+											type="date"
+											value={editStartDate}
+											onChange={(e) => setEditStartDate(e.target.value)}
+											className="px-2 py-1.5 border rounded text-sm"
+										/>
+									</div>
+									<div className="flex flex-col gap-1">
+										<label className="text-xs text-gray-600">Due Date</label>
+										<input
+											type="date"
+											value={editDueDate}
+											onChange={(e) => setEditDueDate(e.target.value)}
+											className="px-2 py-1.5 border rounded text-sm"
+										/>
+									</div>
 								</div>
-								<div className="flex flex-col gap-2">
-									<label className="text-xs text-gray-600">Interest rate (%)</label>
-									<input
-										type="number"
-										value={editRate}
-										onChange={(e) => setEditRate(e.target.value)}
-										className="px-3 py-2 border rounded text-sm"
-									/>
-								</div>
-								<div className="flex justify-end gap-2">
-									<button onClick={cancelEdit} className="px-3 py-2 text-sm border rounded-md">Cancel</button>
+
+								{l?.guarantor && (
+									<>
+										<div className="text-xs font-semibold text-gray-700 mt-3 mb-2">Guarantor Details</div>
+										<div className="grid grid-cols-2 gap-2">
+											<div className="flex flex-col gap-1">
+												<label className="text-xs text-gray-600">Name</label>
+												<input
+													type="text"
+													value={editGuarantorName}
+													onChange={(e) => setEditGuarantorName(e.target.value)}
+													className="px-2 py-1.5 border rounded text-sm"
+													placeholder="Name"
+												/>
+											</div>
+											<div className="flex flex-col gap-1">
+												<label className="text-xs text-gray-600">ID Number</label>
+												<input
+													type="text"
+													value={editGuarantorId}
+													onChange={(e) => setEditGuarantorId(e.target.value)}
+													className="px-2 py-1.5 border rounded text-sm"
+													placeholder="ID Number"
+												/>
+											</div>
+											<div className="flex flex-col gap-1">
+												<label className="text-xs text-gray-600">Phone</label>
+												<input
+													type="text"
+													value={editGuarantorPhone}
+													onChange={(e) => setEditGuarantorPhone(e.target.value)}
+													className="px-2 py-1.5 border rounded text-sm"
+													placeholder="Phone"
+												/>
+											</div>
+											<div className="flex flex-col gap-1">
+												<label className="text-xs text-gray-600">Location</label>
+												<input
+													type="text"
+													value={editGuarantorLocation}
+													onChange={(e) => setEditGuarantorLocation(e.target.value)}
+													className="px-2 py-1.5 border rounded text-sm"
+													placeholder="Location"
+												/>
+											</div>
+											<div className="flex flex-col gap-1 col-span-2">
+												<label className="text-xs text-gray-600">Relationship</label>
+												<input
+													type="text"
+													value={editGuarantorRelationship}
+													onChange={(e) => setEditGuarantorRelationship(e.target.value)}
+													className="px-2 py-1.5 border rounded text-sm"
+													placeholder="e.g., Friend, Family, Colleague"
+												/>
+											</div>
+										</div>
+									</>
+								)}
+
+								<div className="flex justify-end gap-2 mt-3">
+									<button onClick={cancelEdit} className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-50">Cancel</button>
 									<button
 										onClick={() => saveEdit(l)}
 										disabled={saving}
-										className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md disabled:opacity-60"
+										className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-60 hover:bg-blue-700"
 									>
-										{saving ? "Saving..." : "Save"}
+										{saving ? "Saving..." : "Save Changes"}
 									</button>
 								</div>
-								<div className="text-[11px] text-gray-500">
-									Already-paid installments stay accounted for; remaining is recalculated from the new total.
+								<div className="text-[10px] text-gray-500 mt-2">
+									Note: Already-paid installments are preserved; remaining amount is recalculated automatically.
 								</div>
 							</div>
 						) : (
