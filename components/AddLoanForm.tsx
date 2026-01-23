@@ -163,7 +163,7 @@ export default function AddLoanForm() {
     setUseCamera(camera);
     // Small delay to ensure state is set before clicking
     setTimeout(() => {
-      photoInputRef.current?.click();
+    photoInputRef.current?.click();
     }, 0);
   };
 
@@ -335,17 +335,17 @@ export default function AddLoanForm() {
                       </svg>
                       {isUploadingPhoto ? "Uploading..." : "Take Photo"}
                     </button>
-                    <button
-                      type="button"
+                  <button
+                    type="button"
                       onClick={() => handlePhotoButtonClick(false)}
-                      disabled={isUploadingPhoto}
+                    disabled={isUploadingPhoto}
                       className="px-4 py-2 text-sm rounded-md border border-green-600 text-green-700 hover:bg-green-50 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
+                  >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                       </svg>
                       {isUploadingPhoto ? "Uploading..." : customerPhotoUrl ? "Change Photo" : "Choose File"}
-                    </button>
+                  </button>
                   </div>
                   <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 5MB. Stored securely on Cloudinary.</p>
                 </div>

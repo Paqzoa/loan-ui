@@ -38,35 +38,61 @@ export default function ManageCustomersPage() {
 
 function ManageCustomers() {
   const [query, setQuery] = useState("");
-  const [allCustomers, setAllCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const FALLBACK_AVATAR = "/avatar-placeholder.svg";
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await api.get("/customers?limit=100");
-        const data = (res as any).data ?? res;
-        setAllCustomers(Array.isArray(data) ? data : []);
-      } finally {
-        setLoading(false);
+  const DISPLAY_LIMIT = 100; // Limit for initial display
+
+  const loadCustomers = async (searchQuery: string = "") => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = {
+        limit: String(DISPLAY_LIMIT),
+      };
+      
+      // If searching, add query parameter (searches entire database)
+      // If not searching, just load limited display list
+      if (searchQuery.trim()) {
+        params.q = searchQuery.trim();
+        // When searching, increase limit to show more results
+        params.limit = "200";
       }
-    };
-    load();
+
+      const res = await api.get<Array<{
+        id: number;
+        name: string;
+        id_number: string;
+        phone: string | null;
+        location: string | null;
+        profile_image_url: string | null;
+        created_at: string;
+        has_active_loan: boolean;
+      }>>("/customers", { params });
+      
+      const data = Array.isArray(res) ? res : [];
+      setCustomers(data);
+    } catch (error) {
+      console.error("Failed to load customers:", error);
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial load on mount
+  useEffect(() => {
+    loadCustomers();
   }, []);
 
-  const filtered = allCustomers.filter((c) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      c.name?.toLowerCase().includes(q) ||
-      c.id_number?.toString().includes(q) ||
-      c.phone?.toLowerCase().includes(q) ||
-      c.email?.toLowerCase().includes(q) ||
-      c.location?.toLowerCase().includes(q)
-    );
-  });
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadCustomers(query);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const highlightMatch = (text: string, q: string) => {
     if (!text) return "";
@@ -101,7 +127,7 @@ function ManageCustomers() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name / id / phone / email"
+            placeholder="Search by name / id / phone / location (searches entire database)"
             className="flex-1 px-3 py-2 border rounded"
           />
         </div>
@@ -109,11 +135,13 @@ function ManageCustomers() {
 
       {loading ? (
         <div className="text-gray-600 text-sm">Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-sm text-gray-600">No customers found</div>
+      ) : customers.length === 0 ? (
+        <div className="text-sm text-gray-600">
+          {query.trim() ? "No customers found matching your search" : "No customers found"}
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((c) => {
+          {customers.map((c) => {
             const hasActiveLoan =
               typeof c.has_active_loan === "boolean"
                 ? c.has_active_loan
@@ -165,7 +193,6 @@ function ManageCustomers() {
                 </div>
                 <div className="mt-3 text-sm text-gray-600">
                   {highlightMatch(c.phone || "", query)}
-                  {c.email ? <> · {highlightMatch(c.email, query)}</> : ""}
                 </div>
                 <div className="mt-2 text-xs text-gray-500">
                   {highlightMatch(c.location || "—", query)}

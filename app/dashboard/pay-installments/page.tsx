@@ -37,16 +37,48 @@ function normalizeStatus(value: string | undefined | null) {
 function useActiveCustomers() {
   const [customers, setCustomers] = useState<ActiveCustomer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchActive = async () => {
+  const LIMIT = 50;
+
+  const fetchActive = async (search = "", reset = false) => {
+    if (loading) return;
+
     setLoading(true);
     try {
-      const res = await api.get("/loans/active");
-      const rows: ActiveLoan[] = ((res as any).data ?? res) || [];
+      const currentOffset = reset ? 0 : offset;
+
+      const res = await api.get<{
+        items: ActiveLoan[];
+        limit: number;
+        offset: number;
+        count: number;
+        has_more: boolean;
+      }>("/loans/active", {
+       params: {
+  ...(search ? { q: search } : {}),
+  limit: String(LIMIT),
+  offset: String(currentOffset),
+}
+,
+      });
+
+      const data = res;
+
+      const rows: ActiveLoan[] = data.items || [];
+
       const grouped = new Map<string, ActiveCustomer>();
+
+      // When resetting, start with empty map. Otherwise, preserve existing customers.
+      if (!reset) {
+        customers.forEach(c => grouped.set(c.id_number, c));
+      }
+
       rows.forEach((loan) => {
         const key = loan.customer?.id_number;
         if (!key) return;
+
         if (!grouped.has(key)) {
           grouped.set(key, {
             id_number: key,
@@ -56,23 +88,43 @@ function useActiveCustomers() {
             loans: [],
           });
         }
+
         grouped.get(key)!.loans.push(loan);
       });
+
       setCustomers(Array.from(grouped.values()));
+      // Update offset: if reset, set to LIMIT (since we loaded LIMIT items from offset 0)
+      // Otherwise, increment by LIMIT
+      setOffset(reset ? LIMIT : offset + LIMIT);
+      setHasMore(data.has_more);
     } catch (error: any) {
-      const detail = error?.message || error?.response?.data?.detail || "Failed to load active loans";
-      toast.error(detail);
+      toast.error("Failed to load active loans");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchActive();
-  }, []);
+  const resetAndSearch = (search: string) => {
+    setOffset(0);
+    setHasMore(true);
+    fetchActive(search, true);
+  };
 
-  return { customers, loading, refetch: fetchActive };
+  const refetch = () => {
+    // Refetch with current search (we'll need to track it)
+    fetchActive("", true);
+  };
+
+  return {
+    customers,
+    loading,
+    hasMore,
+    loadMore: (search: string) => fetchActive(search, false),
+    search: resetAndSearch,
+    refetch,
+  };
 }
+
 
 function CustomerDetail({
   customer,
@@ -241,23 +293,38 @@ function CustomerDetail({
 
 
 function PayInstallmentsWorkspace() {
-  const { customers, loading, refetch } = useActiveCustomers();
-  const [search, setSearch] = useState("");
+  // const { customers, loading, refetch } = useActiveCustomers();
+  // const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const filteredCustomers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return customers;
-    return customers.filter((cust) => {
-      return (
-        cust.name.toLowerCase().includes(term) ||
-        cust.id_number.toLowerCase().includes(term) ||
-        (cust.phone || "").toLowerCase().includes(term)
-      );
-    });
-  }, [customers, search]);
+const {
+  customers: activeCustomers,
+  loading,
+  loadMore,
+  search: backendSearch,
+  hasMore,
+  refetch
+} = useActiveCustomers();
+
+
+const [searchText, setSearchText] = useState("");
+
+// Initial load on mount
+useEffect(() => {
+  backendSearch("");
+}, []);
+
+// Debounced search when searchText changes
+useEffect(() => {
+  const t = setTimeout(() => {
+    backendSearch(searchText);
+  }, 400);
+
+  return () => clearTimeout(t);
+}, [searchText]);
+
 
   const loadCustomerDetail = async (idNumber: string) => {
     setDetailLoading(true);
@@ -344,32 +411,25 @@ function PayInstallmentsWorkspace() {
         {loading && <span className="text-xs text-gray-500">Refreshing...</span>}
       </div>
       <input
-        type="text"
-        placeholder="Search by name, ID or phone"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="w-full px-3 py-2 border rounded"
-      />
+  type="text"
+  placeholder="Search by name, ID or phone"
+  value={searchText}
+  onChange={(e) => setSearchText(e.target.value)}
+  className="w-full px-3 py-2 border rounded"
+/>
       <div className="space-y-3">
-        {filteredCustomers.length === 0 ? (
+        {activeCustomers.length === 0 ? (
           <div className="text-sm text-gray-500 text-center py-10">
             {loading
               ? "Loading customers..."
               : "No active loans found. When loans are issued they will appear here."}
           </div>
         ) : (
-          filteredCustomers.map((cust) => {
-            const matches =
-              search.trim().length > 0 &&
-              (cust.name.toLowerCase().includes(search.toLowerCase()) ||
-                cust.id_number.toLowerCase().includes(search.toLowerCase()) ||
-                (cust.phone || "").toLowerCase().includes(search.toLowerCase()));
+          activeCustomers.map((cust) => {
             return (
               <div
                 key={cust.id_number}
-                className={`border rounded-lg border-gray-200 bg-white ${
-                  matches ? "ring-2 ring-green-200" : ""
-                }`}
+                className="border rounded-lg border-gray-200 bg-white"
               >
                 <button
                   onClick={() => handleSelectCustomer(cust.id_number)}

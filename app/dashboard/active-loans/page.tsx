@@ -36,7 +36,9 @@ export default function ActiveLoansPage() {
 		setLoading(true);
 		try {
 			const data = await api.get(`/loans/active${q ? `?q=${encodeURIComponent(q)}` : ""}`);
-			setLoans((data as any).data ?? data);
+			// Backend returns { items: [...], limit, offset, count, has_more }
+			const response = (data as any).data ?? data;
+			setLoans(Array.isArray(response) ? response : (response?.items ?? []));
 		} finally {
 			setLoading(false);
 		}
