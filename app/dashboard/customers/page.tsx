@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
 export default function ManageCustomersPage() {
   const { loading: authLoading, isAuthenticated } = useAuth();
@@ -40,7 +41,9 @@ function ManageCustomers() {
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingCustomerId, setDeletingCustomerId] = useState<number | null>(null);
   const FALLBACK_AVATAR = "/avatar-placeholder.svg";
+  const router = useRouter();
 
   const DISPLAY_LIMIT = 100; // Limit for initial display
 
@@ -93,6 +96,25 @@ function ManageCustomers() {
 
     return () => clearTimeout(timer);
   }, [query]);
+
+  const handleDeleteCustomer = async (customer: { id: number; name: string }) => {
+    const confirmed = window.confirm(
+      `Delete customer "${customer.name}"?\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingCustomerId(customer.id);
+      await api.delete(`/customers/${customer.id}`);
+      setCustomers((prev) => prev.filter((item) => item.id !== customer.id));
+      toast.success("Customer deleted successfully");
+    } catch (error: any) {
+      const message = error?.message || "Failed to delete customer";
+      toast.error(message);
+    } finally {
+      setDeletingCustomerId(null);
+    }
+  };
 
   const highlightMatch = (text: string, q: string) => {
     if (!text) return "";
@@ -160,10 +182,9 @@ function ManageCustomers() {
               : "border-emerald-200 bg-green-50";
 
             return (
-              <a
+              <div
                 key={c.id}
-                href={`/dashboard/customers/${c.id}`}
-                className={`group relative block rounded-lg border p-4 shadow-sm hover:shadow-md transition ${cardClasses}`}
+                className={`group relative block rounded-lg border p-4 shadow-sm transition ${cardClasses}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -197,13 +218,30 @@ function ManageCustomers() {
                 <div className="mt-2 text-xs text-gray-500">
                   {highlightMatch(c.location || "—", query)}
                 </div>
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/dashboard/customers/${c.id}`)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    View details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCustomer({ id: c.id, name: c.name || "Customer" })}
+                    disabled={deletingCustomerId === c.id}
+                    className="text-xs text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletingCustomerId === c.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
 
                 <div className="pointer-events-none absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <div className="rounded bg-gray-900 text-white text-xs px-2 py-1 shadow">
                     Joined: {new Date(c.created_at).toLocaleDateString()}
                   </div>
                 </div>
-              </a>
+              </div>
             );
           })}
         </div>
